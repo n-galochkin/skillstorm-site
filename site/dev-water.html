@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Skillstorm — sea, sky, clouds, birds</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1b2a; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #hud { position: fixed; left: 10px; top: 10px; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace;
+         color: #d8ecff; background: rgba(6,24,40,.55); padding: 7px 10px; border-radius: 6px;
+         white-space: pre; pointer-events: none; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./assets/vendor/three.webgpu.min.js",
+    "three/gltf": "./assets/vendor/GLTFLoader.js",
+    "three/skeleton": "./assets/vendor/SkeletonUtils.js",
+    "three/bufferutils": "./assets/utils/BufferGeometryUtils.js"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">booting…</div>
+<script type="module">
+import * as THREE from 'three';
+import { Ocean } from './water.js';
+import { Sky } from './sky.js';
+import { Clouds, Birds } from './atmosphere.js';
+import { ISLANDS, ISLETS } from './archipelago.js';
+
+const hud = document.getElementById('hud');
+const q = new URLSearchParams(location.search);
+const num = (k, d) => (q.has(k) ? parseFloat(q.get(k)) : d);
+
+const SHOT_W = 1280, SHOT_H = 720;
+
+const PRESETS = {
+  shore:   { tx: 86,  tz: 34,  pitch: 30, yaw: 205, fov: 58, h: 55 },
+  horizon: { tx: 150, tz: 10,  pitch: 17, yaw: 200, fov: 62, h: 55 },
+  open:    { tx: 230, tz: 150, pitch: 24, yaw: 160, fov: 60, h: 55 },
+  high:    { tx: 180, tz: 20,  pitch: 34, yaw: 212, fov: 64, h: 150 },
+  birds:   { tx: 150, tz: 10,  pitch: 11, yaw: 200, fov: 50, h: 55 },
+  glitter: { tx: 150, tz: 10,  pitch: 22, yaw: 308, fov: 60, h: 55 },
+};
+
+const renderer = new THREE.WebGPURenderer({ canvas: document.getElementById('c'), antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;   // same as world.js
+renderer.toneMappingExposure = 1.22;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.6, 12000);
+
+/* --------------------------------------------------------------- sky */
+const sky = new Sky({
+  sunElevation: num('sunEl', 34),
+  sunAzimuth: num('sunAz', 128),
+});
+scene.add(sky.object3D);
+scene.fog = new THREE.FogExp2(sky.fogColor.getHex(), 0.0021);
+
+/* ------------------------------------------------------------- ocean */
+const islands = [...ISLANDS, ...ISLETS].map((i) => ({ pos: i.pos, radius: i.radius }));
+const ocean = new Ocean({
+  size: 1700,
+  segments: 130,
+  islands,
+  sunDirection: sky.sunDirection,
+});
+scene.add(ocean.object3D);
+
+/* --------------------------------------------------- clouds and birds */
+const clouds = new Clouds({ sunDirection: sky.sunDirection });
+const birds = new Birds({ sunDirection: sky.sunDirection });
+scene.add(clouds.object3D, birds.object3D);
+ocean.setCloudShadow(clouds.shadowConfig());
+
+/* ------------------------------------------- stand-in islands and light
+   Not mine to ship — just enough land to judge the shelf and the surf against. */
+const sun = new THREE.DirectionalLight(0xfff1d6, 2.6);
+sun.position.copy(sky.sunDirection).multiplyScalar(400);
+scene.add(sun, new THREE.HemisphereLight(0xcfe8ff, 0x3c6a55, 1.5));
+
+const land = new THREE.Group();
+for (const i of [...ISLANDS, ...ISLETS]) {
+  const r = i.radius, h = i.height ?? 8;
+  const rock = new THREE.Mesh(
+    new THREE.CylinderGeometry(r * 0.55, r * 1.02, h, 12, 1),
+    new THREE.MeshStandardNodeMaterial({ color: 0x8e8577, roughness: 0.95 }));
+  rock.position.set(i.pos[0], h / 2 - 1.2, i.pos[1]);
+  const top = new THREE.Mesh(
+    new THREE.CylinderGeometry(r * 0.5, r * 0.56, 1.2, 12, 1),
+    new THREE.MeshStandardNodeMaterial({ color: 0x5f8f3f, roughness: 1 }));
+  top.position.set(i.pos[0], h - 1.2, i.pos[1]);
+  const beach = new THREE.Mesh(
+    new THREE.CylinderGeometry(r * 1.0, r * 1.08, 1.4, 24, 1),
+    new THREE.MeshStandardNodeMaterial({ color: 0xe6d6a6, roughness: 1 }));
+  beach.position.set(i.pos[0], -0.75, i.pos[1]);
+  land.add(rock, top, beach);
+}
+scene.add(land);
+
+/* ------------------------------------------------------------- camera */
+function place(p) {
+  const pitch = THREE.MathUtils.degToRad(p.pitch);
+  const yaw = THREE.MathUtils.degToRad(p.yaw);
+  const dist = p.h / Math.sin(pitch);
+  const target = new THREE.Vector3(p.tx, 0, p.tz);
+  camera.position.set(
+    target.x + Math.sin(yaw) * Math.cos(pitch) * dist,
+    target.y + p.h,
+    target.z + Math.cos(yaw) * Math.cos(pitch) * dist);
+  camera.lookAt(target);
+  camera.fov = p.fov;
+  camera.updateProjectionMatrix();
+}
+let preset = { ...(PRESETS[q.get('cam') || 'shore']) };
+for (const k of ['tx', 'tz', 'pitch', 'yaw', 'fov', 'h']) if (q.has(k)) preset[k] = num(k, preset[k]);
+place(preset);
+
+/* -------------------------------------------------------------- loop */
+let elapsed = num('t', 12);
+const frozen = q.has('t');
+let last = performance.now(), frames = 0, fpsAcc = 0, fps = 0, worst = 0;
+
+/* debug: ride alongside one bird, to check the silhouette and the flap */
+const birdCam = q.has('bird') ? parseInt(q.get('bird'), 10) : -1;
+function aimAtBird(n) {
+  const g = birds.geometry;
+  const per = g.getAttribute('position').count / (birds.options.flocks * birds.options.perFlock);
+  const i = n * per;
+  const o = g.getAttribute('aOrbit').array, m = g.getAttribute('aMotion').array;
+  const cx = o[i * 4], cz = o[i * 4 + 1], r = o[i * 4 + 2], ay = o[i * 4 + 3];
+  const t = elapsed * m[i * 4] + m[i * 4 + 1];
+  const px = cx + Math.cos(t) * r, pz = cz + Math.sin(t) * r;
+  const d = Math.hypot(px, pz);
+  camera.fov = Math.max(6, Math.min(40, 2600 / d));
+  camera.updateProjectionMatrix();
+  camera.lookAt(camera.position.x + px, ay, camera.position.z + pz);
+}
+
+function tick(dt) {
+  if (!frozen) elapsed += dt;
+  ocean.update(dt, elapsed, camera);
+  sky.update(dt, elapsed, camera);
+  clouds.update(dt, elapsed, camera);
+  birds.update(dt, elapsed, camera);
+  if (birdCam >= 0) aimAtBird(birdCam);
+}
+
+function loop() {
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  tick(dt);
+  renderer.render(scene, camera);
+  frames++; fpsAcc += dt;
+  if (fpsAcc > 0.5) { fps = frames / fpsAcc; worst = Math.max(worst, 1000 * fpsAcc / frames); frames = 0; fpsAcc = 0; }
+  hud.textContent =
+    `fps ${fps.toFixed(0)}  worst frame ${worst.toFixed(1)}ms\n` +
+    `t ${elapsed.toFixed(1)}s  cam ${camera.position.x.toFixed(0)},${camera.position.y.toFixed(0)},${camera.position.z.toFixed(0)}\n` +
+    `tris ${renderer.info.render.triangles}  draws ${renderer.info.render.drawCalls}`;
+  window.__stats = { fps, worstMs: worst, tris: renderer.info.render.triangles, draws: renderer.info.render.drawCalls };
+  requestAnimationFrame(loop);
+}
+
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+/* ------------------------------------------------------------- shots
+   A render target is always linear and never tone mapped (WebGPURenderer turns
+   tone mapping off for off-screen passes), so the frame is read back as half
+   floats and run through exactly the same ACES fit + sRGB transfer the canvas
+   gets. What lands in shots/ is what the page shows. */
+const rt = new THREE.RenderTarget(SHOT_W, SHOT_H, { type: THREE.HalfFloatType, samples: 4 });
+rt.texture.colorSpace = THREE.NoColorSpace;
+
+const shotCanvas = document.createElement('canvas');
+shotCanvas.width = SHOT_W; shotCanvas.height = SHOT_H;
+const ctx = shotCanvas.getContext('2d');
+
+const HALF = new Float32Array(65536);
+for (let i = 0; i < 65536; i++) HALF[i] = THREE.DataUtils.fromHalfFloat(i);
+
+const rrt = (v) => (v * (v + 0.0245786) - 0.000090537) / (v * (0.983729 * v + 0.432951) + 0.238081);
+const srgb = (l) => (l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055);
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+function tonemapToBytes(px, out) {
+  const e = renderer.toneMappingExposure / 0.6;
+  for (let i = 0, n = SHOT_W * SHOT_H; i < n; i++) {
+    const r = HALF[px[i * 4]] * e, g = HALF[px[i * 4 + 1]] * e, b = HALF[px[i * 4 + 2]] * e;
+    const x = rrt(0.59719 * r + 0.35458 * g + 0.04823 * b);
+    const y = rrt(0.07600 * r + 0.90834 * g + 0.01566 * b);
+    const z = rrt(0.02840 * r + 0.13383 * g + 0.83777 * b);
+    out[i * 4]     = 255 * srgb(clamp01(1.60475 * x - 0.53108 * y - 0.07367 * z));
+    out[i * 4 + 1] = 255 * srgb(clamp01(-0.10208 * x + 1.10813 * y - 0.00605 * z));
+    out[i * 4 + 2] = 255 * srgb(clamp01(-0.00327 * x - 0.07276 * y + 1.07602 * z));
+    out[i * 4 + 3] = 255;
+  }
+}
+
+window.capture = async function capture(name = 'water', opts = {}) {
+  if (opts.cam) { preset = { ...PRESETS[opts.cam], ...opts }; place(preset); }
+  else if (Object.keys(opts).length) { preset = { ...preset, ...opts }; place(preset); }
+  if (opts.t !== undefined) elapsed = opts.t;
+  tick(0);
+  const aspect = camera.aspect;
+  camera.aspect = SHOT_W / SHOT_H; camera.updateProjectionMatrix();
+  renderer.setRenderTarget(rt);
+  renderer.render(scene, camera);
+  renderer.setRenderTarget(null);
+  const px = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, SHOT_W, SHOT_H);
+  camera.aspect = aspect; camera.updateProjectionMatrix();
+
+  const img = ctx.createImageData(SHOT_W, SHOT_H);
+  tonemapToBytes(px, img.data);
+  ctx.putImageData(img, 0, 0);
+  const data = shotCanvas.toDataURL('image/jpeg', 0.93);
+  const r = await fetch('/__shot', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, data }),
+  });
+  return r.json();
+};
+
+/* Timing that does not depend on the pane compositing: render N frames into the
+   1280x720 target, then force a readback so the GPU has to finish, and divide. */
+window.bench = async function bench(n = 90) {
+  const aspect = camera.aspect;
+  camera.aspect = SHOT_W / SHOT_H; camera.updateProjectionMatrix();
+  renderer.setRenderTarget(rt);
+  tick(0); renderer.render(scene, camera);
+  await renderer.readRenderTargetPixelsAsync(rt, 0, 0, 2, 2);   // flush
+  const t0 = performance.now();
+  for (let i = 0; i < n; i++) { tick(1 / 60); renderer.render(scene, camera); }
+  await renderer.readRenderTargetPixelsAsync(rt, 0, 0, 2, 2);   // wait for the GPU
+  const ms = (performance.now() - t0) / n;
+  renderer.setRenderTarget(null);
+  camera.aspect = aspect; camera.updateProjectionMatrix();
+  return { msPerFrame: +ms.toFixed(2), fps: +(1000 / ms).toFixed(1), n,
+           tris: renderer.info.render.triangles, draws: renderer.info.render.drawCalls };
+};
+
+window.__dbg = { scene, camera, renderer, ocean, sky, clouds, birds, land, place, PRESETS };
+window.__ready = false;
+(async () => {
+  await renderer.init();
+  renderer.render(scene, camera);
+  window.__ready = true;
+  loop();
+  if (q.has('shot')) {
+    await new Promise((r) => setTimeout(r, 600));
+    const res = await window.capture(q.get('shot'));
+    hud.textContent = 'saved ' + JSON.stringify(res);
+  }
+})();
+
+window.__err = [];
+addEventListener('error', (e) => { window.__err.push(String(e.message)); });
+addEventListener('unhandledrejection', (e) => { window.__err.push(String(e.reason)); });
+</script>
+</body>
+</html>

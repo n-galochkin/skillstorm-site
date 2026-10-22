@@ -1,0 +1,821 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Skillstorm</title>
+<meta name="description" content="Skillstorm is an Archero-style auto-battle royale roguelite for PC and Android: you steer, your weapon fires on its own, the storm closes in, and the last one standing takes the island.">
+<meta property="og:title" content="Skillstorm — the auto-battle royale roguelite">
+<meta property="og:description" content="Land with nothing. Build your run mid-fight. Be the last one standing and the island is yours.">
+
+<style>
+/* The page is the archipelago. One WebGPU scene holds the whole upper page and the
+   scroll sails a camera from island to island; each island's plaque tells its part.
+
+   The interface speaks the game's own language: the game's typefaces (Bender for
+   anything functional, Cormorant Garamond for its voice — both shipped in the build),
+   the game's stone button plate, the game's icons. Nothing here is generic web chrome. */
+
+@font-face{
+  font-family:'Bender'; font-weight:900; font-style:normal; font-display:swap;
+  src:url('assets/fonts/Bender-Black.otf') format('opentype');
+}
+@font-face{
+  font-family:'Bender'; font-weight:700; font-style:normal; font-display:swap;
+  src:url('assets/fonts/Bender-Bold.otf') format('opentype');
+}
+@font-face{
+  font-family:'Cormorant SS'; font-weight:600; font-style:normal; font-display:swap;
+  src:url('assets/fonts/CormorantGaramond-SemiBold.ttf') format('truetype');
+}
+
+:root{
+  color-scheme: dark;
+  /* taken off the start-screen painting and the game's own plaques */
+  --abyss:#06172a;
+  --deep:#0b2c45;
+  --slate:#102f47;
+  --line:#2a5572;
+  --stone:#e8dcc0;        /* the plaque's cream stone */
+  --stone-dim:#bfae8d;
+  --terracotta:#b8512f;   /* the plate's inset */
+  --gold:#f2c55c;
+  --ink:#f6efe2;
+  --mist:#a8c3d6;
+  --sea:#2ea3d8;
+
+  --ui:'Bender','Trebuchet MS',system-ui,sans-serif;
+  --voice:'Cormorant SS',Georgia,'Times New Roman',serif;
+
+  --gut-l: max(34px, env(safe-area-inset-left, 0px));
+  --gut-r: max(34px, env(safe-area-inset-right, 0px));
+  /* a modular type scale, so nothing is sized by feel */
+  --t-eyebrow:11px; --t-body:19px; --t-h2:clamp(36px,4.2vw,56px); --t-stat:clamp(44px,4.6vw,60px);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--abyss); color:var(--ink);
+  font-family:var(--voice); font-size:20px; line-height:1.58;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+body.playing{overflow:hidden}
+img{display:block; max-width:100%}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--gold); outline-offset:3px}
+h1,h2,h3{margin:0; font-family:var(--voice); font-weight:600; letter-spacing:-.005em; text-wrap:balance}
+p{margin:0}
+
+/* small functional type is the game's Bender, always letterspaced caps */
+.ui{
+  font-family:var(--ui); font-weight:700; text-transform:uppercase;
+  letter-spacing:.18em; font-size:var(--t-eyebrow);
+  text-shadow:0 1px 8px rgba(3,12,22,.85);
+}
+
+#sea{position:fixed; inset:0; width:100%; height:100%; display:block; z-index:0}
+#track{position:relative; z-index:1; pointer-events:none}
+.vignette{
+  position:fixed; inset:0; z-index:1; pointer-events:none;
+  background:radial-gradient(135% 100% at 50% 40%, transparent 46%, rgba(4,14,26,.6) 100%);
+}
+
+/* ---------------- masthead ---------------- */
+.masthead{
+  position:fixed; z-index:20; top:env(safe-area-inset-top,0px); left:0; right:0;
+  background:linear-gradient(180deg, rgba(5,18,32,.62), transparent);
+  display:flex; align-items:center; gap:18px;
+  padding:18px var(--gut-r) 18px var(--gut-l);
+  transition:opacity .4s;
+}
+body.playing .masthead{opacity:0; pointer-events:none}
+/* the header's own link turns its pointer back on; in the fight that put an invisible
+   'Follow the devlog' right over 'Leave' */
+body.playing .masthead *{pointer-events:none !important}
+.masthead .mark{display:flex; align-items:center; gap:10px}
+.masthead .mark img{width:116px; image-rendering:auto}
+.masthead .spacer{margin-left:auto}
+.lang{display:flex; gap:2px}
+.lang button{
+  font-family:var(--ui); font-weight:700; font-size:11px; letter-spacing:.14em;
+  background:none; border:0; color:var(--mist); padding:6px 8px; cursor:pointer;
+  transition:color .2s;
+}
+.lang button:hover{color:var(--ink)}
+.lang button[aria-pressed="true"]{color:var(--gold)}
+.lang i{width:1px; background:var(--line); margin:7px 0}
+
+/* ---------------- the game's own button ---------------- */
+.plate{
+  position:relative; display:inline-flex; align-items:center; justify-content:center;
+  min-height:62px; padding:0 40px; cursor:pointer; border:0; background:none;
+  font-family:var(--ui); font-weight:900; font-size:15px; letter-spacing:.14em;
+  text-transform:uppercase; color:#fff3e2; text-decoration:none;
+  text-shadow:0 2px 0 rgba(60,20,8,.55);
+  border-image:url('assets/ui/T_UI_PlatePrimary.png') 70 fill / 22px 38px / 0 stretch;
+  transition:transform .16s cubic-bezier(.2,.8,.3,1), filter .16s;
+}
+.plate:hover{transform:translateY(-2px); filter:brightness(1.08)}
+.plate:active{transform:translateY(1px); filter:brightness(.94)}
+
+.ghost{
+  display:inline-flex; align-items:center; gap:9px; cursor:pointer;
+  font-family:var(--ui); font-weight:700; font-size:12px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--stone); text-decoration:none;
+  background:rgba(16,47,71,.72); border:1px solid var(--line);
+  padding:11px 18px; transition:border-color .2s, color .2s, transform .16s;
+}
+.ghost:hover{border-color:var(--gold); color:var(--gold); transform:translateY(-1px)}
+
+/* names pinned onto the water, in real type so they stay crisp */
+#worldLabels{position:fixed; inset:0; z-index:9; pointer-events:none}
+.worldlabel{
+  position:absolute; left:0; top:0; white-space:nowrap;
+  font-family:var(--ui); font-weight:900; font-size:19px; letter-spacing:.42em;
+  color:rgba(242,197,92,.92); text-indent:.42em;
+  text-shadow:0 2px 14px rgba(3,12,22,.9), 0 1px 2px rgba(3,12,22,.95);
+  opacity:0; transition:opacity .5s ease;
+}
+@media (max-width:860px){ .worldlabel{font-size:14px; letter-spacing:.3em} }
+
+/* ---------------- island chapters ---------------- */
+/* No boxes. The chapter lies on the sea under a soft scrim, the way film titles
+   sit on a shot: typography and emptiness carry it, and the only object in the
+   frame is the game's own stone button. */
+.panels{position:fixed; inset:0; z-index:10; pointer-events:none}
+.panel{
+  position:absolute; top:50%; translate:0 -50%; width:min(560px, 50vw); height:auto;
+  display:flex; flex-direction:column; justify-content:center;
+  padding:0 clamp(28px,4vw,64px);
+  opacity:0; pointer-events:none; min-width:0;
+  transition:opacity .3s ease;
+}
+.panel.left{left:0}
+.panel.right{right:0; text-align:right; align-items:flex-end}
+.panel.on{opacity:1; pointer-events:auto; transition:opacity .7s ease}
+/* the backdrop is a blurred slab behind the text, feathered on every side */
+.panel::before{
+  content:''; position:absolute; inset:-6% -14%; pointer-events:none; z-index:-2;
+  background:rgba(3,13,24,.82); filter:blur(38px); border-radius:46%;
+}
+.panel > *{max-width:30rem; min-width:0}
+.panel.right > *{text-align:right}
+
+/* the island's name, set enormous and almost out of sight behind the chapter */
+.panel .watermark{
+  position:absolute; left:clamp(20px,3vw,52px); right:auto; top:50%; translate:0 -50%;
+  font-family:var(--ui); font-weight:900; font-size:clamp(90px,14vw,190px); line-height:.8;
+  letter-spacing:-.02em; color:rgba(232,220,192,.035); pointer-events:none;
+  white-space:nowrap; z-index:-1;
+}
+.panel.right .watermark{left:auto; right:clamp(20px,3vw,52px)}
+
+/* each element arrives on its own beat */
+.panel .where, .panel h2, .panel p, .panel .act, .panel .facts,
+.panel .tally, .panel .wall, .panel .shots, .panel .clip, .panel .links, .panel .note{
+  opacity:0; transform:translateY(14px);
+  transition:opacity .6s cubic-bezier(.2,.8,.3,1), transform .7s cubic-bezier(.2,.8,.3,1);
+}
+.panel.on .where{opacity:1; transform:none; transition-delay:.05s}
+.panel.on h2{opacity:1; transform:none; transition-delay:.14s}
+.panel.on p{opacity:1; transform:none; transition-delay:.24s}
+.panel.on p + p{transition-delay:.32s}
+.panel.on .tally, .panel.on .shots, .panel.on .clip{opacity:1; transform:none; transition-delay:.36s}
+.panel.on .act, .panel.on .wall, .panel.on .links{opacity:1; transform:none; transition-delay:.44s}
+.panel.on .facts, .panel.on .note{opacity:1; transform:none; transition-delay:.54s}
+
+.panel .where{
+  display:flex; align-items:center; gap:12px; color:var(--gold); margin-bottom:18px;
+}
+.panel.right .where{flex-direction:row-reverse}
+.panel .where::after{
+  content:''; width:68px; height:1px; background:var(--gold); opacity:.55;
+  transform:scaleX(0); transform-origin:left; transition:transform .8s cubic-bezier(.2,.8,.3,1) .25s;
+}
+.panel.right .where::after{transform-origin:right}
+.panel.on .where::after{transform:scaleX(1)}
+.panel h2{font-size:var(--t-h2); line-height:1.03; margin-bottom:22px;
+  text-shadow:0 2px 18px rgba(3,12,22,.75), 0 1px 2px rgba(3,12,22,.9)}
+.panel p{color:#e6f1f8; font-size:var(--t-body); line-height:1.6; max-width:33rem;
+  text-shadow:0 1px 10px rgba(3,12,22,.8)}
+.panel p + p{margin-top:15px}
+.panel .act{margin-top:30px; display:flex; flex-wrap:wrap; gap:18px; align-items:center}
+.panel.right .act{justify-content:flex-end}
+.panel .act .hint{color:var(--mist)}
+
+.facts{display:flex; flex-wrap:wrap; gap:14px 24px; margin-top:26px; color:var(--mist); min-width:0}
+.panel.right .facts{justify-content:flex-end}
+.facts span{display:flex; align-items:center; gap:8px}
+.facts span::before{content:''; width:5px; height:5px; background:var(--gold); transform:rotate(45deg); flex:none}
+
+.tally{display:flex; gap:40px; margin:26px 0 8px}
+.panel.right .tally{justify-content:flex-end}
+.tally b{
+  display:block; font-family:var(--ui); font-weight:900; font-size:var(--t-stat); line-height:.9;
+  color:var(--gold); font-variant-numeric:tabular-nums; letter-spacing:.005em;
+}
+.tally span{color:var(--mist); font-family:var(--ui); font-weight:700; font-size:10px; letter-spacing:.18em; text-transform:uppercase}
+.wall{display:flex; flex-wrap:wrap; margin-top:18px; font-family:var(--ui); font-weight:700; font-size:11.5px; letter-spacing:.09em; line-height:2.1; min-width:0; max-width:34rem}
+.panel.right .wall{justify-content:flex-end}
+.wall span{color:#6e93ad; padding-right:1.1em; transition:color .45s}
+.wall span.lit{color:var(--gold)}
+
+.shots{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:24px; max-width:30rem}
+.shots img{border:1px solid var(--line); aspect-ratio:9/16; object-fit:cover; width:100%; height:auto; min-width:0}
+.clip{margin-top:24px; border:1px solid var(--line); overflow:hidden; max-width:17rem}
+.clip video{width:100%; height:auto; aspect-ratio:9/16; display:block; background:#000}
+/* the devlog clip is tall: it stands beside the channel list, not above it */
+.panel[data-island="devlog"]{display:grid; grid-template-columns:minmax(0,1fr) 150px; column-gap:22px; align-content:center}
+.panel[data-island="devlog"] > :not(.clip):not(.links){grid-column:1 / -1}
+.panel[data-island="devlog"] .links{grid-column:1; grid-row:5; align-self:end; margin-top:0}
+.panel[data-island="devlog"] .clip{grid-column:2; grid-row:5; width:auto; max-width:none}
+.links{display:flex; flex-direction:column; margin-top:20px; border-top:1px solid var(--line); max-width:26rem; width:100%}
+.links a{
+  display:flex; gap:14px; align-items:center; padding:13px 2px; min-width:0;
+  border-bottom:1px solid var(--line); text-decoration:none;
+  font-family:var(--ui); font-weight:700; font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+  transition:padding-left .22s, color .22s;
+}
+.panel.right .links a{flex-direction:row-reverse}
+.links a:hover{padding-left:10px; color:var(--gold)}
+.links b{min-width:104px}
+.links span{color:var(--mist); letter-spacing:.1em; min-width:0; overflow-wrap:anywhere}
+.note{margin-top:18px; color:var(--mist); font-family:var(--ui); font-weight:700; font-size:10px; letter-spacing:.18em; text-transform:uppercase}
+
+@media (max-width:860px){
+  .panel, .panel.left, .panel.right{
+    /* full height, text at the foot: the scrim then has room to fade out with no
+       element edge cutting across the frame, and stays dense under every line */
+    width:auto; left:0; right:0; top:auto; bottom:0; translate:0 0; justify-content:flex-end;
+    padding:0 var(--gut-r) calc(env(safe-area-inset-bottom,0px) + 136px) var(--gut-l);
+    height:auto; max-height:72svh; overflow-y:auto; text-align:left; align-items:flex-start;
+  }
+  .panel .watermark{display:none}
+  .panel.right{text-align:left; align-items:flex-start}
+  .panel.right > *{text-align:left}
+  .panel.right .where{flex-direction:row}
+  .panel.right .act, .panel.right .facts, .panel.right .tally, .panel.right .wall{justify-content:flex-start}
+  .panel.right .links a{flex-direction:row}
+  .panel .watermark{display:none}
+  .panel h2{font-size:30px}
+  .shots{max-width:none}
+}
+
+/* ---------------- the sea chart: a torn scrap of parchment (app.js draws it) ---------------- */
+.chart{
+  position:fixed; z-index:20; right:var(--gut-r); bottom:calc(env(safe-area-inset-bottom,0px) + 20px);
+  width:300px; transition:opacity .4s;
+  filter:drop-shadow(0 10px 18px rgba(0,0,0,.45)) drop-shadow(0 2px 3px rgba(0,0,0,.3));
+  rotate:-1.2deg;
+}
+body.playing .chart{opacity:0; pointer-events:none}
+/* a chapter on the right would run into the chart: the chart moves to the free side */
+@media (min-width:861px){ body.text-right .chart{right:auto; left:var(--gut-l); rotate:1.2deg} }
+.chart h3{display:none}
+.chart svg{display:block; width:100%; height:auto; overflow:visible}
+.chart .dot{cursor:pointer}
+.chart .dot .land{transition:fill .25s}
+.chart .dot:hover .land{fill:#d9c77a}
+.chart .dot.here .land{fill:#e2b84f}
+.chart .dot text{
+  font-family:var(--voice); font-weight:600; font-size:11px; fill:#4a3216; letter-spacing:.02em;
+  pointer-events:none; paint-order:stroke; stroke:rgba(246,233,200,.85); stroke-width:2.4px;
+}
+.chart .dot.here text{fill:#a23a22}
+.chart .title{font-family:var(--voice); font-weight:600; font-size:14px; fill:#4a3216; letter-spacing:.03em}
+.chart .n{font-family:var(--voice); font-weight:600; font-size:8px; fill:#5a3e1c}
+@media (max-width:860px){
+  .chart{width:196px; bottom:calc(env(safe-area-inset-bottom,0px) + 12px)}
+}
+
+/* ---------------- fight ---------------- */
+.hud{
+  position:fixed; inset:0; z-index:15; pointer-events:none; opacity:0; transition:opacity .35s;
+  padding:calc(env(safe-area-inset-top,0px) + 18px) var(--gut-r) 18px var(--gut-l);
+}
+.hud.on{opacity:1}
+.hud-row{display:flex; align-items:center; gap:14px; max-width:1000px; margin-inline:auto}
+/* the game's own health bar: cream frame, green fill */
+.hp{
+  flex:1 1 auto; max-width:330px; height:22px; position:relative;
+  background:#152b3b; border:2px solid var(--stone); box-shadow:0 2px 0 rgba(8,22,34,.6);
+}
+.hp i{display:block; height:100%; width:100%; background:linear-gradient(180deg,#8ad46a,#4aa845); transition:width .16s}
+.hud .stat{
+  font-family:var(--ui); font-weight:900; font-size:13px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--stone); text-shadow:0 2px 0 rgba(8,22,34,.7);
+}
+.hud .leave{pointer-events:auto; margin-left:auto}
+
+.verdict{
+  position:fixed; inset:0; z-index:18; display:grid; place-items:center; text-align:center;
+  background:rgba(5,18,32,.8); backdrop-filter:blur(9px);
+  opacity:0; pointer-events:none; transition:opacity .4s;
+  padding-left:var(--gut-l); padding-right:var(--gut-r);
+}
+.verdict.on{opacity:1; pointer-events:auto}
+.verdict .in{display:flex; flex-direction:column; align-items:center; gap:20px; max-width:430px}
+.verdict h3{font-size:clamp(30px,4.4vw,42px)}
+.verdict p{color:var(--mist)}
+
+.stick{
+  position:fixed; z-index:16; width:130px; height:130px; border-radius:50%;
+  border:2px solid rgba(232,220,192,.3); background:rgba(8,26,42,.25);
+  pointer-events:none; opacity:0; transition:opacity .2s;
+}
+.stick.on{opacity:1}
+.stick i{position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%; background:rgba(232,220,192,.45)}
+
+/* ---------------- first load ---------------- */
+.boot{
+  position:fixed; inset:0; z-index:30; display:grid; place-items:center; text-align:center;
+  background:var(--abyss); transition:opacity .9s;
+  padding-left:var(--gut-l); padding-right:var(--gut-r);
+}
+.boot.gone{opacity:0; pointer-events:none}
+.boot .in{display:flex; flex-direction:column; align-items:center; gap:26px; max-width:460px}
+.boot .crest{display:flex; align-items:center; gap:18px}
+.boot .crest img.decor{width:52px; opacity:.75}
+/* DecorRight.png is already drawn facing right: the star sits next to the logo */
+@media (max-width:520px){
+  .boot .crest{gap:10px}
+  .boot .crest img.decor{width:34px}
+  .boot img.logo{width:min(58vw,330px)}
+}
+.boot img.logo{width:min(66vw,330px)}
+.bar{width:min(64vw,230px); height:3px; background:rgba(42,85,114,.6); overflow:hidden}
+.bar i{display:block; height:100%; width:0; background:var(--gold); transition:width .3s}
+.boot small{color:var(--mist); font-family:var(--voice); font-size:17px; letter-spacing:.02em}
+
+.cue{
+  position:fixed; z-index:14; left:50%; translate:-50% 0;
+  bottom:calc(env(safe-area-inset-bottom,0px) + 22px);
+  display:flex; flex-direction:column; align-items:center; gap:9px;
+  color:var(--mist); transition:opacity .4s;
+}
+.cue img{width:13px; opacity:.7; animation:cue 2.4s ease-in-out infinite}
+@keyframes cue{0%,100%{transform:translateY(0); opacity:.4} 50%{transform:translateY(5px); opacity:.85}}
+@media (max-width:860px){ .cue{display:none} }
+/* the cover's text reaches the foot of a short screen: the cue waits on the island's side,
+   left of the chart, instead of on the facts line */
+body.hero-on .cue{left:auto; right:calc(var(--gut-r) + 120px); bottom:calc(env(safe-area-inset-bottom,0px) + 230px); translate:0 0}
+@media (prefers-reduced-motion: reduce){ .cue img{animation:none} .panel{transition:opacity .25s} }
+
+/* logos are sized by width only; without this the height attribute stretched them */
+.masthead .mark img, .foot img, .panel.hero .hero-logo, .boot .logo{height:auto}
+
+/* ---- landing: header call to action ---- */
+.masthead .follow{pointer-events:auto; font-size:11px; padding:9px 16px}
+
+/* ---- landing: the hero plaque says what the game is in ten seconds ---- */
+.panel.hero{width:min(760px, 60vw)}
+.panel.hero .hero-logo{width:min(300px, 34vw); margin:0 0 22px -6px; opacity:0; transform:translateY(10px);
+  transition:opacity .6s ease, transform .6s ease}
+.panel.hero.on .hero-logo{opacity:1; transform:none}
+.panel.hero h2{font-size:clamp(32px, 3.1vw, 54px); line-height:1.06; text-wrap:wrap; max-width:none}
+.panel.hero .act{flex-direction:row; align-items:center; max-width:none; width:100%}
+/* the hero carries the logo itself; the header's copy would sit right on top of it */
+body.hero-on .masthead .mark{opacity:0}
+.masthead .mark{transition:opacity .4s ease}
+.panel.hero .act{gap:14px; flex-wrap:wrap}
+.panel .act a.ghost{text-decoration:none}
+.tally{flex-wrap:wrap}
+
+/* ---- landing: the end of the voyage, in ordinary page flow ---- */
+.outro{
+  position:relative; z-index:12;
+  padding-block:clamp(70px, 12vh, 140px) 40px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  background:linear-gradient(180deg, rgba(6,23,42,0) 0, rgba(6,23,42,.86) 140px, var(--abyss) 320px);
+  display:flex; flex-direction:column; align-items:center; gap:clamp(56px, 9vh, 96px);
+}
+.outro .cta-band{max-width:44rem; text-align:center; display:flex; flex-direction:column; align-items:center}
+.outro .cta-band .where{justify-content:center; opacity:1; transform:none}
+.outro .cta-band .where::after{display:none}
+.outro .cta-band h2{font-size:var(--t-h2); line-height:1.05; margin-bottom:18px}
+.outro .cta-band p{color:#e6f1f8; font-size:var(--t-body); max-width:34rem}
+/* the eyebrow is a p too: it keeps the small gold caps of every other chapter */
+.outro .cta-band p.where{color:var(--gold); font-size:var(--t-eyebrow); margin-bottom:16px; display:flex; gap:12px}
+.outro .act{display:flex; flex-wrap:wrap; justify-content:center; gap:14px; margin-top:28px; opacity:1; transform:none}
+.outro a.plate, .outro a.ghost{text-decoration:none}
+
+.faq{width:min(44rem, 100%); min-width:0}
+.faq h3{font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--gold);
+  margin-bottom:14px; font-weight:700}
+.faq details{border-top:1px solid var(--line)}
+.faq details:last-child{border-bottom:1px solid var(--line)}
+.faq summary{
+  list-style:none; cursor:pointer; padding:18px 36px 18px 0; position:relative;
+  font-size:calc(var(--t-body) * 1.12); color:var(--ink);
+}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{
+  content:''; position:absolute; right:6px; top:50%; width:9px; height:9px;
+  border-right:1.5px solid var(--gold); border-bottom:1.5px solid var(--gold);
+  transform:translateY(-70%) rotate(45deg); transition:transform .25s ease;
+}
+.faq details[open] summary::after{transform:translateY(-30%) rotate(-135deg)}
+.faq summary:hover{color:var(--gold)}
+.faq details p{color:#cfe0ec; font-size:var(--t-body); line-height:1.6; padding:0 0 20px; max-width:38rem}
+
+.foot{width:min(44rem, 100%); display:flex; flex-direction:column; align-items:center; gap:18px;
+  padding-top:28px; border-top:1px solid var(--line); color:var(--mist)}
+.foot img{width:120px; opacity:.9}
+.foot nav{display:flex; flex-wrap:wrap; justify-content:center; gap:10px 26px}
+.foot a{color:var(--mist); text-decoration:none; font-size:11px; letter-spacing:.18em; text-transform:uppercase; font-weight:700}
+.foot a:hover{color:var(--gold)}
+.foot small{font-size:10px; letter-spacing:.16em; text-transform:uppercase}
+
+/* phones: the hero spans the screen like every other plaque, and shrinks to fit */
+@media (max-width:860px){
+  /* the map card is hidden on the cover, so the cover keeps no room for it at the
+     foot; everything has to show without scrolling inside the plaque */
+  .panel.hero{width:auto; padding-bottom:calc(env(safe-area-inset-bottom,0px) + 26px)}
+  /* the plaque does not scroll inside itself (that clipped the feathered slab into a
+     hard line across the island); the text sits on a shade that rises from the foot */
+  .panel, .panel.left, .panel.right{max-height:none; overflow:visible}
+  .panel::before{inset:-90px 0 0 0; filter:none; border-radius:0;
+    background:linear-gradient(180deg, rgba(3,13,24,0), rgba(3,13,24,.62) 70px, rgba(3,13,24,.86) 170px)}
+  /* a phone chapter is one thought: the island has to stay in sight above it */
+  .panel p{font-size:15px; line-height:1.5}
+  .panel p + p, .panel .act .hint{display:none}
+  .panel p.note{font-size:10px; display:block}
+  .panel h2{margin-bottom:12px}
+  .panel .act{margin-top:20px}
+  .tally{gap:24px; margin:16px 0 4px}
+  .tally b{font-size:34px}
+  .tally span{font-size:9px}
+  /* three lines of titles are enough to show what the wall is; it fades out below */
+  .wall{max-height:calc(11.5px * 2.1 * 3); overflow:hidden; margin-top:10px;
+    -webkit-mask-image:linear-gradient(180deg, #000 55%, transparent);
+    mask-image:linear-gradient(180deg, #000 55%, transparent)}
+  .shots{margin-top:16px; gap:8px}
+  .clip{width:132px; margin-top:16px}
+  .links{margin-top:14px}
+  .links a{padding:10px 2px}
+  .note{margin-top:10px}
+  /* the devlog clip stands beside the channel list instead of above it */
+  .panel[data-island="devlog"]{display:grid; grid-template-columns:104px minmax(0,1fr); column-gap:16px; align-content:end}
+  .panel[data-island="devlog"] > :not(.clip):not(.links){grid-column:1 / -1}
+  .panel[data-island="devlog"] .clip{width:auto; align-self:end; grid-column:1; grid-row:5}
+  .panel[data-island="devlog"] .links{margin-top:16px; align-self:end; grid-column:2; grid-row:5}
+  .panel[data-island="devlog"] .links a{flex-direction:column; align-items:flex-start; gap:2px; padding:8px 2px}
+  .panel[data-island="devlog"] .links b{min-width:0}
+  .panel.hero .hero-logo{width:150px; margin:0 0 8px -4px}
+  .panel.hero .where{margin-bottom:10px}
+  .panel.hero h2{font-size:28px; margin-bottom:12px}
+  .panel.hero p{font-size:15px; line-height:1.5}
+  .panel.hero .act{margin-top:18px; gap:10px}
+  .panel.hero .facts{margin-top:14px; gap:6px 16px; flex-direction:row; flex-wrap:wrap}
+  .masthead .follow{white-space:nowrap; padding:8px 12px; font-size:10px}
+  /* the map card belongs to the voyage; on the cover it sat on the facts line */
+  body.hero-on .chart{opacity:0; pointer-events:none}
+}
+/* short phones: the devlog clip would push the chapter under the header */
+@media (max-width:860px) and (max-height:700px){
+  .clip{display:none}
+}
+
+/* in the fight, and while the end section is on screen, the floating chapter
+   furniture steps aside */
+body.playing .panel, body.playing .chart, body.playing .cue, body.playing .outro{opacity:0 !important; pointer-events:none !important}
+body.at-end .panel, body.at-end .chart, body.at-end .cue{opacity:0 !important; pointer-events:none !important}
+/* over the end section the header gets a solid head of its own, so the questions
+   scroll away under it instead of through the logo */
+.masthead::before{content:''; position:absolute; inset:calc(-1 * env(safe-area-inset-top,0px)) 0 -28px 0; z-index:-1;
+  background:linear-gradient(180deg, var(--abyss) 62%, transparent); opacity:0; transition:opacity .4s; pointer-events:none}
+body.at-end .masthead::before{opacity:1}
+.chart{transition:opacity .4s ease}
+
+/* ---------------- buttons: scraps torn off the sea chart (tornbtn.js builds them) ---------------- */
+.torn{
+  position:relative; display:inline-grid; place-items:center; cursor:pointer;
+  border:0; border-image:none; background:none; padding:0 34px; height:58px;
+  font-family:var(--ui); font-weight:900; font-size:15px; letter-spacing:.15em;
+  text-transform:uppercase; text-decoration:none; color:#3a2410; white-space:nowrap;
+  filter:drop-shadow(0 6px 10px rgba(0,0,0,.35));
+}
+.torn-sub{height:46px; padding:0 24px; font-size:12px}
+.masthead .torn.follow{height:40px; padding:0 18px; font-size:11px}
+@media (max-width:860px){
+  .masthead .torn.follow{height:34px; padding:0 14px; font-size:10px}
+  .torn{height:52px; padding:0 26px; font-size:14px}
+  .torn-sub{height:42px; padding:0 18px; font-size:11px}
+}
+.torn .sizer{visibility:hidden}
+.torn .half{position:absolute; inset:0; display:grid; place-items:center; transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+.torn .h1{clip-path:polygon(-10% -20%,110% -20%,110% 31.5%,-10% 71.5%)}
+.torn .h2{clip-path:polygon(-10% 70%,110% 30%,110% 120%,-10% 120%)}
+.torn svg{position:absolute; inset:0; width:100%; height:100%; overflow:visible}
+.torn .paper{fill:url(#tornPaper); stroke:#9c7c46; stroke-width:1.5; stroke-linejoin:round}
+/* secondary scraps come off the chart's sea: pale blue paper, navy ink */
+.torn-sub{color:#123049}
+.torn-sub .paper{fill:url(#tornPaperDim); stroke:#5d8496}
+.torn .route{fill:none; stroke:rgba(150,40,20,.5); stroke-width:1.5; stroke-dasharray:4 4}
+.torn-sub .route{display:none}
+.torn .lbl{position:relative}
+.torn .cut{position:absolute; left:-8%; right:-8%; top:50%; height:3px; margin-top:-1.5px; z-index:3; opacity:0;
+  transform:rotate(var(--ang,-5deg)) scaleX(0); transform-origin:left center;
+  background:linear-gradient(90deg,transparent,#fff 20%,#ffe39a 70%,transparent); box-shadow:0 0 12px 3px rgba(255,200,90,.9)}
+.torn .glow{position:absolute; left:4%; right:4%; top:50%; height:6px; margin-top:-3px; transform:rotate(var(--ang,-5deg)); opacity:0;
+  background:linear-gradient(90deg,transparent,#ff7a1f 15%,#ffd27a 50%,#ff7a1f 85%,transparent); filter:blur(1.5px); transition:opacity .3s .15s}
+.torn:hover .cut, .torn:focus-visible .cut{animation:tornCut .45s .06s cubic-bezier(.2,.8,.2,1) both}
+.torn:hover .h1, .torn:focus-visible .h1{transform:translate(-5px,-4px) rotate(-.6deg); transition-delay:.12s}
+.torn:hover .h2, .torn:focus-visible .h2{transform:translate(5px,4px) rotate(.6deg); transition-delay:.12s}
+.torn:hover .glow, .torn:focus-visible .glow{opacity:1}
+.torn:hover, .torn:focus-visible{animation:tornShake .3s .16s}
+.torn:active{scale:.97}
+@keyframes tornCut{0%{opacity:1;transform:rotate(var(--ang,-5deg)) scaleX(0)}55%{opacity:1;transform:rotate(var(--ang,-5deg)) scaleX(1)}100%{opacity:0;transform:rotate(var(--ang,-5deg)) scaleX(1)}}
+@keyframes tornShake{0%,100%{translate:0 0}20%{translate:-3px 1px}40%{translate:3px -1px}60%{translate:-2px 0}80%{translate:2px 1px}}
+@media (prefers-reduced-motion:reduce){ .torn *, .torn{animation:none!important; transition:none!important} }
+
+/* the sword cursor (mouse only) */
+html.sword-cursor, html.sword-cursor *{cursor:none!important}
+#sword{position:fixed; left:0; top:0; z-index:9999; pointer-events:none; will-change:transform; transform:translate(-100px,-100px)}
+#sword svg{display:block; width:62px; height:62px; overflow:visible; transform-origin:36px 36px;
+  filter:drop-shadow(0 3px 2px rgba(0,0,0,.5)); transition:filter .2s}
+#sword.over svg{filter:drop-shadow(0 0 6px rgba(255,210,110,.95)) drop-shadow(0 3px 2px rgba(0,0,0,.5))}
+#sword.swing svg{animation:swordSwing .32s cubic-bezier(.3,.7,.3,1)}
+@keyframes swordSwing{0%{transform:rotate(0)}30%{transform:rotate(-38deg)}62%{transform:rotate(58deg)}100%{transform:rotate(0)}}
+.sword-arc{position:fixed; z-index:9998; pointer-events:none; width:110px; height:110px; margin:-55px 0 0 -55px; border-radius:50%;
+  border:5px solid transparent; border-top-color:rgba(255,236,180,.95); border-right-color:rgba(255,190,90,.6);
+  filter:drop-shadow(0 0 6px rgba(255,200,90,.9)); animation:swordArc .34s ease-out forwards}
+@keyframes swordArc{0%{opacity:0;transform:rotate(-80deg) scale(.6)}30%{opacity:1}100%{opacity:0;transform:rotate(40deg) scale(1.1)}}
+
+/* ---- a chapter's clip: one short silent loop that shows the chapter's point ---- */
+.panel:has(.beat){width:min(760px, 60vw)}
+.panel:has(.beat){display:grid; column-gap:26px; align-content:center}
+.panel.left:has(.beat){grid-template-columns:168px minmax(0,1fr)}
+.panel.right:has(.beat){grid-template-columns:minmax(0,1fr) 168px}
+.panel:has(.beat) > :not(.beat):not(.watermark){grid-column:2}
+.panel.right:has(.beat) > :not(.beat):not(.watermark){grid-column:1}
+.beat{grid-row:1 / span 8; align-self:center; margin:0; border:1px solid var(--line); overflow:hidden;
+  box-shadow:0 14px 34px rgba(0,0,0,.45); opacity:0; transform:translateY(14px); transition:opacity .6s, transform .6s}
+.panel.left:has(.beat) .beat{grid-column:1}
+.panel.right:has(.beat) .beat{grid-column:2}
+.panel.on .beat{opacity:1; transform:none; transition-delay:.3s}
+.beat video{display:block; width:100%; height:auto; aspect-ratio:9/16; background:#000}
+/* the cover's clip is the biggest: the best of the game, until the trailer takes its place */
+.panel.left:has(.beat.big){grid-template-columns:230px minmax(0,1fr); width:min(900px, 66vw)}
+@media (max-width:860px){
+  .panel:has(.beat), .panel.left:has(.beat), .panel.right:has(.beat){width:auto; grid-template-columns:minmax(0,1fr) 92px; align-content:end; column-gap:14px}
+  .panel:has(.beat) > :not(.beat):not(.watermark), .panel.right:has(.beat) > :not(.beat):not(.watermark){grid-column:1}
+  .panel.left:has(.beat) .beat, .panel.right:has(.beat) .beat{grid-column:2; grid-row:1 / span 3; align-self:start}
+  .panel.left:has(.beat.big){grid-template-columns:minmax(0,1fr) 104px; width:auto}
+}
+
+
+/* the shade behind each chapter's text is its own lopsided, rounded blot, never the same oval twice */
+@media (min-width:861px){
+  .panel[data-island="landing"]::before{border-radius:62% 38% 54% 46% / 48% 60% 40% 52%; inset:-8% -10% -4% -18%; rotate:-4deg}
+  .panel[data-island="combat"]::before{border-radius:41% 59% 35% 65% / 56% 38% 62% 44%; inset:-4% -18% -10% -8%; rotate:5deg}
+  .panel[data-island="skills"]::before{border-radius:55% 45% 68% 32% / 40% 55% 45% 60%; inset:-10% -8% -6% -16%; rotate:-2deg}
+  .panel[data-island="storm"]::before{border-radius:35% 65% 50% 50% / 60% 45% 55% 40%; inset:-14% -12% -12% -20%; rotate:6deg}
+  .panel[data-island="forge"]::before{border-radius:66% 34% 42% 58% / 52% 64% 36% 48%; inset:-6% -16% -8% -12%; rotate:-6deg}
+  .panel[data-island="devlog"]::before{border-radius:45% 55% 60% 40% / 38% 50% 50% 62%; inset:-8% -10% -12% -14%; rotate:3deg}
+}
+
+/* ---- builds: the combo web ---- */
+.web{margin-top:14px; min-width:0; max-width:460px}
+.web svg{display:block; width:100%; height:auto; overflow:visible}
+.web .rings circle{fill:none; stroke:rgba(168,195,214,.14); stroke-width:1; stroke-dasharray:2 5}
+.web .threads path{fill:none; stroke:rgba(242,197,92,.34); stroke-width:1.3; transition:stroke .3s, opacity .3s}
+.web .threads path.t3{stroke:rgba(232,90,80,.4)}
+.web svg.focus .threads path{opacity:.12}
+.web svg.focus .threads path.on{opacity:1; stroke:#ffe39a; stroke-width:2.6; filter:drop-shadow(0 0 3px rgba(255,214,110,.9))}
+.web svg.focus .threads path.t3.on{stroke:#ffb0a4; filter:drop-shadow(0 0 3px rgba(255,120,100,.9))}
+/* a lit thread draws itself from the ingredient to the title and stays drawn */
+.web .threads path.flow{stroke-dasharray:var(--len) var(--len); animation:webFlow .7s cubic-bezier(.3,.6,.3,1) both}
+@keyframes webFlow{from{stroke-dashoffset:var(--len)}to{stroke-dashoffset:0}}
+.web .node{cursor:pointer; outline:none; transition:opacity .3s}
+.web .node image{transition:transform .35s cubic-bezier(.34,1.56,.64,1); transform-box:fill-box; transform-origin:center}
+.web .node .halo{fill:transparent; transition:fill .3s}
+.web svg.focus .node{opacity:.22; filter:saturate(.4)}
+.web svg.focus .node.on{opacity:1; filter:brightness(1.18) drop-shadow(0 0 6px rgba(255,220,140,.75))}
+.web .node.on .halo{fill:rgba(242,197,92,.22)}
+.web .node.k3.on .halo{fill:rgba(232,90,80,.3)}
+.web .node.lead image{transform:scale(1.22)}
+.web .node.lead .halo{fill:rgba(242,197,92,.45)}
+.web .node.k3.lead .halo{fill:rgba(232,90,80,.55)}
+.web-cap{min-height:58px; margin-top:6px; display:flex; flex-direction:column; gap:4px}
+.web-cap b{font-family:var(--ui); font-weight:900; font-size:14px; letter-spacing:.12em; text-transform:uppercase}
+.web-cap b.k2{color:var(--gold)} .web-cap b.k3{color:#ff8a7a} .web-cap b.ks{color:var(--ink)}
+.web-cap .rec{display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; font-family:var(--ui); font-weight:700; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--mist)}
+.web-cap .rec i{font-style:normal; display:inline-flex; align-items:center; gap:5px}
+.web-cap .rec img{width:20px; height:20px}
+.web-cap .rec em{font-style:normal; color:var(--gold)}
+.web-cap .tw, .web-cap span:not(.rec){font-family:var(--voice); font-size:15px; color:#e6f1f8}
+@media (max-width:860px){
+  .panel[data-island="skills"] .web{grid-column:1 / -1; max-width:none; margin-top:8px}
+  .web-cap{min-height:46px}
+  .web-cap .tw{font-size:14px}
+}
+
+/* the contact address, as plain text people can copy */
+.foot .contact{margin:0; font-family:var(--voice); font-size:16px; color:#e6f1f8; text-transform:none; letter-spacing:0; user-select:all}
+.foot .contact a{font-family:inherit; font-size:inherit; letter-spacing:0; text-transform:none; color:var(--gold)}
+
+/* short phones (640 px and less): the cover and the builds chapter give up their extras,
+   so the text stays under the header and the island stays in sight */
+@media (max-width:860px) and (max-height:700px){
+  .panel.hero .hero-logo{display:none}
+  body.hero-on .masthead .mark{opacity:1}
+  .panel.hero .facts{display:none}
+  .panel.hero h2{font-size:25px}
+  .panel.hero p{font-size:14px}
+  .panel[data-island="skills"] > p:not(.where){display:none}
+  .panel[data-island="skills"] .web{max-width:236px; justify-self:center}
+  .web-cap .tw{display:none}
+  .web-cap{min-height:34px}
+}
+</style>
+
+<canvas id="sea"></canvas>
+<div class="vignette"></div>
+<div id="track"></div>
+
+<section class="outro" id="outro">
+  <div class="cta-band">
+    <p class="where ui"><span>Coming to PC and Android</span></p>
+    <h2>Be there when the boats land</h2>
+    <p>Skillstorm is in development. Follow the devlog to hear first about the Steam page and the demo.</p>
+    <div class="act">
+      <a class="plate" href="https://www.youtube.com/@NikitaGalochkin" target="_blank" rel="noopener">YouTube</a>
+      <a class="ghost" href="https://www.tiktok.com/@solodevich" target="_blank" rel="noopener">TikTok</a>
+      <a class="ghost" href="https://www.instagram.com/your_sillity/" target="_blank" rel="noopener">Instagram</a>
+    </div>
+  </div>
+
+  <div class="faq">
+    <h3 class="ui">Questions</h3>
+    <details><summary>When does it come out?</summary>
+      <p>There is no date yet. Next come a Steam page and a playable demo; follow the devlog to catch both.</p></details>
+    <details><summary>Which platforms?</summary>
+      <p>PC through Steam, and Android. One game, one progression, controls made for each.</p></details>
+    <details><summary>How much will it cost?</summary>
+      <p>On PC, early access at a modest price. On Android, free to play &mdash; with no pay-to-win.</p></details>
+    <details><summary>Is it PvP?</summary>
+      <p>No, and we say so plainly: your rivals are bots that play like people, with names, builds and gear of their own. That means no queues and no cheaters &mdash; a match starts the moment you want one.</p></details>
+    <details><summary>What does &ldquo;auto-battle&rdquo; mean here?</summary>
+      <p>Archero-style: your character attacks on its own; you control movement and choose skills on level-up. It is not a unit-placing autobattler.</p></details>
+    <details><summary>Can I play with friends?</summary>
+      <p>Each player builds a kingdom of their own, and friends are allies. Shared runs are planned.</p></details>
+  </div>
+
+  <footer class="foot ui">
+    <img src="assets/logo.webp" alt="Skillstorm" width="900" height="233">
+    <nav>
+      <a href="https://www.youtube.com/@NikitaGalochkin" target="_blank" rel="noopener">YouTube</a>
+      <a href="https://www.tiktok.com/@solodevich" target="_blank" rel="noopener">TikTok</a>
+      <a href="https://www.instagram.com/your_sillity/" target="_blank" rel="noopener">Instagram</a>
+    </nav>
+    <p class="contact">Press and business: <a href="mailto:work.n.galochkin@gmail.com">work.n.galochkin@gmail.com</a></p>
+    <small>Skill and title icons: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a>, CC BY 3.0</small>
+    <small>&copy; 2026 Skillstorm &middot; in development &middot; no release date yet</small>
+  </footer>
+</section>
+
+<header class="masthead">
+  <span class="mark"><img src="assets/logo.webp" alt="Skillstorm" width="900" height="233"></span>
+  <span class="spacer"></span>
+  <a class="ghost follow" href="https://www.youtube.com/@NikitaGalochkin" target="_blank" rel="noopener">Follow the devlog</a>
+</header>
+
+<h1 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Skillstorm</h1>
+
+<div id="worldLabels" aria-hidden="true"></div>
+
+<div class="panels" id="panels">
+
+  <article class="panel left hero" data-island="landing">
+    <figure class="beat big"><video src="assets/beat-cover.mp4" poster="assets/beat-cover.jpg" muted loop playsinline preload="none" width="360" height="640" aria-label="Late-game builds tearing through crowds"></video></figure>
+    <img class="hero-logo" src="assets/logo.webp" alt="Skillstorm" width="900" height="233">
+    <p class="where ui"><span>Auto-battle royale roguelite</span></p>
+    <h2>Land with nothing.<br>Leave the last one standing.</h2>
+    <p>You steer &mdash; your weapon fires on its own. Ten to fifteen rivals, a storm closing in, six-minute matches, and the island goes to whoever is left.</p>
+    <div class="act">
+      <button class="plate" id="sailBtn">Play in your browser</button>
+      <a class="ghost" href="https://www.youtube.com/@NikitaGalochkin" target="_blank" rel="noopener">Follow development</a>
+    </div>
+    <div class="facts ui">
+      <span>PC (Steam) &amp; Android</span>
+      <span>5&ndash;8 minute matches</span>
+      <span>In development</span>
+    </div>
+  </article>
+
+  <article class="panel right" data-island="combat">
+    <span class="watermark">FIGHT</span>
+    <figure class="beat"><video src="assets/beat-fight.mp4" poster="assets/beat-fight.jpg" muted loop playsinline preload="none" width="360" height="640" aria-label="A real run: the hero stands still and the bow fires on its own into a pack"></video></figure>
+    <p class="where ui"><span>How it plays</span></p>
+    <h2>Move to live.<br>Stand still to strike.</h2>
+    <p>You only steer. Stop and your weapon fires by itself; move and it holds. Every fight is the same choice: finish the kill, or get out of the arrows.</p>
+    <p>Below is a live fight on the game&rsquo;s own models, running in your browser.</p>
+    <div class="act">
+      <button class="plate" id="playBtn">Take control</button>
+      <span class="hint ui">WASD or drag</span>
+    </div>
+  </article>
+
+  <article class="panel left" data-island="skills">
+    <span class="watermark">BUILDS</span>
+    <figure class="beat"><video src="assets/beat-builds.mp4" poster="assets/beat-builds.jpg" muted loop playsinline preload="none" width="360" height="640" aria-label="Level-up cards, one pick after another, and the combo title they fuse into"></video></figure>
+    <p class="where ui"><span>Builds</span></p>
+    <h2>Two skills fuse into a title</h2>
+    <p>Every level-up offers three skills. The right pair fuses into a combo title, and titles fuse again into deeper ones: 26 skills, 35 titles.</p>
+    <div class="web" id="comboWeb"></div>
+  </article>
+
+  <article class="panel right" data-island="storm">
+    <span class="watermark">STORM</span>
+    <figure class="beat"><video src="assets/beat-storm.mp4" poster="assets/beat-storm.jpg" muted loop playsinline preload="none" width="360" height="640" aria-label="The storm closes in: the hero runs for the safe circle, losing health in the fog"></video></figure>
+    <p class="where ui"><span>The zone</span></p>
+    <h2>The storm picks the battlefield</h2>
+    <p>Fog and lightning eat the island&rsquo;s edge and the circle keeps closing. Roaming bosses and mob packs guard the best loot, so the middle of a match never goes quiet.</p>
+  </article>
+
+  <article class="panel left" data-island="forge">
+    <span class="watermark">FORGE</span>
+    <figure class="beat"><video src="assets/beat-forge.mp4" poster="assets/beat-forge.jpg" muted loop playsinline preload="none" width="360" height="640" aria-label="The game's own screens: the archipelago map, the forge, the equipment"></video></figure>
+    <p class="where ui"><span>Between runs</span></p>
+    <h2>From a linen shirt to king of the archipelago</h2>
+    <p>Every island you take pays out: resources, gear, rare finds. Forge your weapon, complete your armour, sail for meaner islands. The kingdom you build is yours alone.</p>
+    <p class="note">Screens from the current build</p>
+  </article>
+
+  <article class="panel right" data-island="devlog">
+    <span class="watermark">DEVLOG</span>
+    <p class="where ui"><span>Built in the open</span></p>
+    <h2>Made by one developer, out in the open</h2>
+    <p>Every new weapon, boss and bug shows up in a short clip first. Watch the game grow week by week, and tell us what it needs next.</p>
+    <div class="clip">
+      <video src="assets/devlog-clip.mp4" poster="assets/devlog-poster.webp" muted loop playsinline controls preload="none" width="540" height="960"></video>
+    </div>
+    <div class="links">
+      <a href="https://www.youtube.com/@NikitaGalochkin" target="_blank" rel="noopener"><b>YouTube</b><span>@NikitaGalochkin</span></a>
+      <a href="https://www.tiktok.com/@solodevich" target="_blank" rel="noopener"><b>TikTok</b><span>@solodevich</span></a>
+      <a href="https://www.instagram.com/your_sillity/" target="_blank" rel="noopener"><b>Instagram</b><span>@your_sillity</span></a>
+    </div>
+  </article>
+</div>
+
+<aside class="chart">
+  <h3><img src="assets/ui/T_UI_IconMap.png" alt=""><span>Archipelago</span></h3>
+  <svg id="chartSvg" viewBox="0 0 140 68" aria-hidden="true"></svg>
+</aside>
+
+<div class="hud" id="hud">
+  <div class="hud-row">
+    <div class="hp"><i id="hpFill"></i></div>
+    <span class="stat" id="statKills"></span>
+    <span class="stat" id="statFoes"></span>
+    <button class="ghost leave" id="exitBtn" >Leave</button>
+  </div>
+</div>
+
+<div class="stick" id="stick"><i id="stickNub"></i></div>
+
+<div class="verdict" id="verdict">
+  <div class="in">
+    <h3 id="verdictTitle"></h3>
+    <p id="verdictLine"></p>
+    <button class="plate" id="againBtn" >Again</button>
+  </div>
+</div>
+
+<div class="cue" id="cue">
+  <span class="ui">Scroll</span>
+  <img src="assets/ui/T_UI_IconArrow.png" alt="">
+</div>
+
+<div class="boot" id="boot">
+  <div class="in">
+    <div class="crest">
+      <img class="decor" src="assets/ui/DecorLeft.png" alt="">
+      <img class="logo" src="assets/logo.webp" alt="Skillstorm" width="900" height="233">
+      <img class="decor" src="assets/ui/DecorRight.png" alt="">
+    </div>
+    <div class="bar"><i id="bootBar"></i></div>
+    <small id="bootText">Raising sail…</small>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./assets/vendor/three.webgpu.min.js",
+    "three/gltf": "./assets/vendor/GLTFLoader.js",
+    "three/draco": "./assets/vendor/DRACOLoader.js",
+    "three/tsl": "./assets/vendor/three.webgpu.min.js",
+    "three/bloom": "./assets/vendor/BloomNode.js",
+    "three/blur": "./assets/vendor/GaussianBlurNode.js",
+    "three/skeleton": "./assets/vendor/SkeletonUtils.js",
+    "three/bufferutils": "./assets/utils/BufferGeometryUtils.js"
+  }
+}
+</script>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="tornPaper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4e6c4"/><stop offset="1" stop-color="#dcc493"/></linearGradient>
+  <linearGradient id="tornPaperDim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d6e9ee"/><stop offset="1" stop-color="#a3c4d0"/></linearGradient>
+</defs></svg>
+<script type="module" src="app.js"></script>
+<script type="module" src="tornbtn.js"></script>

@@ -1,0 +1,504 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Skillstorm</title>
+
+<style>
+/* The page is the archipelago. One WebGPU scene holds the whole upper page and the
+   scroll sails a camera from island to island; each island's plaque tells its part.
+
+   The interface speaks the game's own language: the game's typefaces (Bender for
+   anything functional, Cormorant Garamond for its voice — both shipped in the build),
+   the game's stone button plate, the game's icons. Nothing here is generic web chrome. */
+
+@font-face{
+  font-family:'Bender'; font-weight:900; font-style:normal; font-display:swap;
+  src:url('assets/fonts/Bender-Black.otf') format('opentype');
+}
+@font-face{
+  font-family:'Bender'; font-weight:700; font-style:normal; font-display:swap;
+  src:url('assets/fonts/Bender-Bold.otf') format('opentype');
+}
+@font-face{
+  font-family:'Cormorant SS'; font-weight:600; font-style:normal; font-display:swap;
+  src:url('assets/fonts/CormorantGaramond-SemiBold.ttf') format('truetype');
+}
+
+:root{
+  color-scheme: dark;
+  /* taken off the start-screen painting and the game's own plaques */
+  --abyss:#06172a;
+  --deep:#0b2c45;
+  --slate:#102f47;
+  --line:#2a5572;
+  --stone:#e8dcc0;        /* the plaque's cream stone */
+  --stone-dim:#bfae8d;
+  --terracotta:#b8512f;   /* the plate's inset */
+  --gold:#f2c55c;
+  --ink:#f6efe2;
+  --mist:#a8c3d6;
+  --sea:#2ea3d8;
+
+  --ui:'Bender','Trebuchet MS',system-ui,sans-serif;
+  --voice:'Cormorant SS',Georgia,'Times New Roman',serif;
+
+  --gut-l: max(34px, env(safe-area-inset-left, 0px));
+  --gut-r: max(34px, env(safe-area-inset-right, 0px));
+  /* a modular type scale, so nothing is sized by feel */
+  --t-eyebrow:11px; --t-body:19px; --t-h2:clamp(36px,4.2vw,56px); --t-stat:clamp(44px,4.6vw,60px);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--abyss); color:var(--ink);
+  font-family:var(--voice); font-size:20px; line-height:1.58;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+body.playing{overflow:hidden}
+img{display:block; max-width:100%}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--gold); outline-offset:3px}
+h1,h2,h3{margin:0; font-family:var(--voice); font-weight:600; letter-spacing:-.005em; text-wrap:balance}
+p{margin:0}
+
+/* small functional type is the game's Bender, always letterspaced caps */
+.ui{
+  font-family:var(--ui); font-weight:700; text-transform:uppercase;
+  letter-spacing:.18em; font-size:var(--t-eyebrow);
+  text-shadow:0 1px 8px rgba(3,12,22,.85);
+}
+
+#sea{position:fixed; inset:0; width:100%; height:100%; display:block; z-index:0}
+#track{position:relative; z-index:1; pointer-events:none}
+.vignette{
+  position:fixed; inset:0; z-index:1; pointer-events:none;
+  background:radial-gradient(135% 100% at 50% 40%, transparent 46%, rgba(4,14,26,.6) 100%);
+}
+
+/* ---------------- masthead ---------------- */
+.masthead{
+  position:fixed; z-index:20; top:env(safe-area-inset-top,0px); left:0; right:0;
+  background:linear-gradient(180deg, rgba(5,18,32,.62), transparent);
+  display:flex; align-items:center; gap:18px;
+  padding:18px var(--gut-r) 18px var(--gut-l);
+  transition:opacity .4s;
+}
+body.playing .masthead{opacity:0; pointer-events:none}
+.masthead .mark{display:flex; align-items:center; gap:10px}
+.masthead .mark img{width:116px; image-rendering:auto}
+.masthead .spacer{margin-left:auto}
+.lang{display:flex; gap:2px}
+.lang button{
+  font-family:var(--ui); font-weight:700; font-size:11px; letter-spacing:.14em;
+  background:none; border:0; color:var(--mist); padding:6px 8px; cursor:pointer;
+  transition:color .2s;
+}
+.lang button:hover{color:var(--ink)}
+.lang button[aria-pressed="true"]{color:var(--gold)}
+.lang i{width:1px; background:var(--line); margin:7px 0}
+
+/* ---------------- the game's own button ---------------- */
+.plate{
+  position:relative; display:inline-flex; align-items:center; justify-content:center;
+  min-height:62px; padding:0 40px; cursor:pointer; border:0; background:none;
+  font-family:var(--ui); font-weight:900; font-size:15px; letter-spacing:.14em;
+  text-transform:uppercase; color:#fff3e2; text-decoration:none;
+  text-shadow:0 2px 0 rgba(60,20,8,.55);
+  border-image:url('assets/ui/T_UI_PlatePrimary.png') 70 fill / 22px 38px / 0 stretch;
+  transition:transform .16s cubic-bezier(.2,.8,.3,1), filter .16s;
+}
+.plate:hover{transform:translateY(-2px); filter:brightness(1.08)}
+.plate:active{transform:translateY(1px); filter:brightness(.94)}
+
+.ghost{
+  display:inline-flex; align-items:center; gap:9px; cursor:pointer;
+  font-family:var(--ui); font-weight:700; font-size:12px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--stone); text-decoration:none;
+  background:rgba(16,47,71,.72); border:1px solid var(--line);
+  padding:11px 18px; transition:border-color .2s, color .2s, transform .16s;
+}
+.ghost:hover{border-color:var(--gold); color:var(--gold); transform:translateY(-1px)}
+
+/* names pinned onto the water, in real type so they stay crisp */
+#worldLabels{position:fixed; inset:0; z-index:9; pointer-events:none}
+.worldlabel{
+  position:absolute; left:0; top:0; white-space:nowrap;
+  font-family:var(--ui); font-weight:900; font-size:19px; letter-spacing:.42em;
+  color:rgba(242,197,92,.92); text-indent:.42em;
+  text-shadow:0 2px 14px rgba(3,12,22,.9), 0 1px 2px rgba(3,12,22,.95);
+  opacity:0; transition:opacity .5s ease;
+}
+@media (max-width:860px){ .worldlabel{font-size:14px; letter-spacing:.3em} }
+
+/* ---------------- island chapters ---------------- */
+/* No boxes. The chapter lies on the sea under a soft scrim, the way film titles
+   sit on a shot: typography and emptiness carry it, and the only object in the
+   frame is the game's own stone button. */
+.panels{position:fixed; inset:0; z-index:10; pointer-events:none}
+.panel{
+  position:absolute; top:50%; translate:0 -50%; width:min(560px, 50vw); height:auto;
+  display:flex; flex-direction:column; justify-content:center;
+  padding:0 clamp(28px,4vw,64px);
+  opacity:0; pointer-events:none; min-width:0;
+  transition:opacity .3s ease;
+}
+.panel.left{left:0}
+.panel.right{right:0; text-align:right; align-items:flex-end}
+.panel.on{opacity:1; pointer-events:auto; transition:opacity .7s ease}
+/* the backdrop is a blurred slab behind the text, feathered on every side */
+.panel::before{
+  content:''; position:absolute; inset:-6% -14%; pointer-events:none; z-index:-2;
+  background:rgba(3,13,24,.82); filter:blur(38px); border-radius:46%;
+}
+.panel > *{max-width:30rem; min-width:0}
+.panel.right > *{text-align:right}
+
+/* the island's name, set enormous and almost out of sight behind the chapter */
+.panel .watermark{
+  position:absolute; left:clamp(20px,3vw,52px); right:auto; top:50%; translate:0 -50%;
+  font-family:var(--ui); font-weight:900; font-size:clamp(90px,14vw,190px); line-height:.8;
+  letter-spacing:-.02em; color:rgba(232,220,192,.035); pointer-events:none;
+  white-space:nowrap; z-index:-1;
+}
+.panel.right .watermark{left:auto; right:clamp(20px,3vw,52px)}
+
+/* each element arrives on its own beat */
+.panel .where, .panel h2, .panel p, .panel .act, .panel .facts,
+.panel .tally, .panel .wall, .panel .shots, .panel .clip, .panel .links, .panel .note{
+  opacity:0; transform:translateY(14px);
+  transition:opacity .6s cubic-bezier(.2,.8,.3,1), transform .7s cubic-bezier(.2,.8,.3,1);
+}
+.panel.on .where{opacity:1; transform:none; transition-delay:.05s}
+.panel.on h2{opacity:1; transform:none; transition-delay:.14s}
+.panel.on p{opacity:1; transform:none; transition-delay:.24s}
+.panel.on p + p{transition-delay:.32s}
+.panel.on .tally, .panel.on .shots, .panel.on .clip{opacity:1; transform:none; transition-delay:.36s}
+.panel.on .act, .panel.on .wall, .panel.on .links{opacity:1; transform:none; transition-delay:.44s}
+.panel.on .facts, .panel.on .note{opacity:1; transform:none; transition-delay:.54s}
+
+.panel .where{
+  display:flex; align-items:center; gap:12px; color:var(--gold); margin-bottom:18px;
+}
+.panel.right .where{flex-direction:row-reverse}
+.panel .where::after{
+  content:''; width:68px; height:1px; background:var(--gold); opacity:.55;
+  transform:scaleX(0); transform-origin:left; transition:transform .8s cubic-bezier(.2,.8,.3,1) .25s;
+}
+.panel.right .where::after{transform-origin:right}
+.panel.on .where::after{transform:scaleX(1)}
+.panel h2{font-size:var(--t-h2); line-height:1.03; margin-bottom:22px;
+  text-shadow:0 2px 18px rgba(3,12,22,.75), 0 1px 2px rgba(3,12,22,.9)}
+.panel p{color:#e6f1f8; font-size:var(--t-body); line-height:1.6; max-width:33rem;
+  text-shadow:0 1px 10px rgba(3,12,22,.8)}
+.panel p + p{margin-top:15px}
+.panel .act{margin-top:30px; display:flex; flex-wrap:wrap; gap:18px; align-items:center}
+.panel.right .act{justify-content:flex-end}
+.panel .act .hint{color:var(--mist)}
+
+.facts{display:flex; flex-wrap:wrap; gap:14px 24px; margin-top:26px; color:var(--mist); min-width:0}
+.panel.right .facts{justify-content:flex-end}
+.facts span{display:flex; align-items:center; gap:8px}
+.facts span::before{content:''; width:5px; height:5px; background:var(--gold); transform:rotate(45deg); flex:none}
+
+.tally{display:flex; gap:40px; margin:26px 0 8px}
+.panel.right .tally{justify-content:flex-end}
+.tally b{
+  display:block; font-family:var(--ui); font-weight:900; font-size:var(--t-stat); line-height:.9;
+  color:var(--gold); font-variant-numeric:tabular-nums; letter-spacing:.005em;
+}
+.tally span{color:var(--mist); font-family:var(--ui); font-weight:700; font-size:10px; letter-spacing:.18em; text-transform:uppercase}
+.wall{display:flex; flex-wrap:wrap; margin-top:18px; font-family:var(--ui); font-weight:700; font-size:11.5px; letter-spacing:.09em; line-height:2.1; min-width:0; max-width:34rem}
+.panel.right .wall{justify-content:flex-end}
+.wall span{color:#6e93ad; padding-right:1.1em; transition:color .45s}
+.wall span.lit{color:var(--gold)}
+
+.shots{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:24px; max-width:30rem}
+.shots img{border:1px solid var(--line); aspect-ratio:9/16; object-fit:cover}
+.clip{margin-top:24px; border:1px solid var(--line); overflow:hidden; max-width:17rem}
+.clip video{width:100%; display:block; background:#000}
+.links{display:flex; flex-direction:column; margin-top:20px; border-top:1px solid var(--line); max-width:26rem; width:100%}
+.links a{
+  display:flex; gap:14px; align-items:center; padding:13px 2px; min-width:0;
+  border-bottom:1px solid var(--line); text-decoration:none;
+  font-family:var(--ui); font-weight:700; font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+  transition:padding-left .22s, color .22s;
+}
+.panel.right .links a{flex-direction:row-reverse}
+.links a:hover{padding-left:10px; color:var(--gold)}
+.links b{min-width:104px}
+.links span{color:var(--mist); letter-spacing:.1em; min-width:0; overflow-wrap:anywhere}
+.note{margin-top:18px; color:var(--mist); font-family:var(--ui); font-weight:700; font-size:10px; letter-spacing:.18em; text-transform:uppercase}
+
+@media (max-width:860px){
+  .panel, .panel.left, .panel.right{
+    /* full height, text at the foot: the scrim then has room to fade out with no
+       element edge cutting across the frame, and stays dense under every line */
+    width:auto; left:0; right:0; top:auto; bottom:0; translate:0 0; justify-content:flex-end;
+    padding:0 var(--gut-r) calc(env(safe-area-inset-bottom,0px) + 92px) var(--gut-l);
+    height:auto; max-height:72svh; overflow-y:auto; text-align:left; align-items:flex-start;
+  }
+  .panel .watermark{display:none}
+  .panel.right{text-align:left; align-items:flex-start}
+  .panel.right > *{text-align:left}
+  .panel.right .where{flex-direction:row}
+  .panel.right .act, .panel.right .facts, .panel.right .tally, .panel.right .wall{justify-content:flex-start}
+  .panel.right .links a{flex-direction:row}
+  .panel .watermark{display:none}
+  .panel h2{font-size:30px}
+  .shots{max-width:none}
+}
+
+/* ---------------- the sea chart ---------------- */
+.chart{
+  position:fixed; z-index:20; right:var(--gut-r); bottom:calc(env(safe-area-inset-bottom,0px) + 24px);
+  width:264px; padding:14px 15px 11px;
+  background:linear-gradient(176deg, rgba(12,38,58,.86), rgba(6,22,37,.9));
+  border:1px solid var(--line);
+  transition:opacity .4s;
+}
+.chart::before{
+  content:''; position:absolute; left:-1px; right:-1px; top:-1px; height:2px;
+  background:linear-gradient(90deg, transparent, var(--stone-dim) 20%, var(--stone-dim) 80%, transparent);
+}
+body.playing .chart{opacity:0; pointer-events:none}
+.chart h3{
+  font-family:var(--ui); font-weight:700; font-size:10px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--mist); margin-bottom:10px;
+  display:flex; align-items:center; gap:8px;
+}
+.chart h3 img{width:17px; opacity:.85}
+.chart svg{display:block; width:100%; height:auto; overflow:visible}
+.chart .dot{cursor:pointer}
+.chart .dot circle{transition:fill .25s, r .25s}
+.chart .dot:hover circle{fill:var(--gold)}
+.chart .dot text{
+  font-family:var(--ui); font-weight:700; font-size:4.6px; fill:var(--stone-dim);
+  letter-spacing:.14em; text-transform:uppercase; pointer-events:none;
+}
+.chart .dot:hover text, .chart .dot.here text{fill:var(--gold)}
+@media (max-width:860px){
+  .chart{width:166px; padding:10px 11px 8px; bottom:calc(env(safe-area-inset-bottom,0px) + 14px)}
+  .chart h3{display:none}
+}
+
+/* ---------------- fight ---------------- */
+.hud{
+  position:fixed; inset:0; z-index:15; pointer-events:none; opacity:0; transition:opacity .35s;
+  padding:calc(env(safe-area-inset-top,0px) + 18px) var(--gut-r) 18px var(--gut-l);
+}
+.hud.on{opacity:1}
+.hud-row{display:flex; align-items:center; gap:14px; max-width:1000px; margin-inline:auto}
+/* the game's own health bar: cream frame, green fill */
+.hp{
+  flex:1 1 auto; max-width:330px; height:22px; position:relative;
+  background:#152b3b; border:2px solid var(--stone); box-shadow:0 2px 0 rgba(8,22,34,.6);
+}
+.hp i{display:block; height:100%; width:100%; background:linear-gradient(180deg,#8ad46a,#4aa845); transition:width .16s}
+.hud .stat{
+  font-family:var(--ui); font-weight:900; font-size:13px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--stone); text-shadow:0 2px 0 rgba(8,22,34,.7);
+}
+.hud .leave{pointer-events:auto; margin-left:auto}
+
+.verdict{
+  position:fixed; inset:0; z-index:18; display:grid; place-items:center; text-align:center;
+  background:rgba(5,18,32,.8); backdrop-filter:blur(9px);
+  opacity:0; pointer-events:none; transition:opacity .4s;
+  padding-left:var(--gut-l); padding-right:var(--gut-r);
+}
+.verdict.on{opacity:1; pointer-events:auto}
+.verdict .in{display:flex; flex-direction:column; align-items:center; gap:20px; max-width:430px}
+.verdict h3{font-size:clamp(30px,4.4vw,42px)}
+.verdict p{color:var(--mist)}
+
+.stick{
+  position:fixed; z-index:16; width:130px; height:130px; border-radius:50%;
+  border:2px solid rgba(232,220,192,.3); background:rgba(8,26,42,.25);
+  pointer-events:none; opacity:0; transition:opacity .2s;
+}
+.stick.on{opacity:1}
+.stick i{position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%; background:rgba(232,220,192,.45)}
+
+/* ---------------- first load ---------------- */
+.boot{
+  position:fixed; inset:0; z-index:30; display:grid; place-items:center; text-align:center;
+  background:var(--abyss); transition:opacity .9s;
+  padding-left:var(--gut-l); padding-right:var(--gut-r);
+}
+.boot.gone{opacity:0; pointer-events:none}
+.boot .in{display:flex; flex-direction:column; align-items:center; gap:26px; max-width:460px}
+.boot .crest{display:flex; align-items:center; gap:18px}
+.boot .crest img.decor{width:52px; opacity:.75}
+.boot .crest img.decor.flip{transform:scaleX(-1)}
+.boot img.logo{width:min(66vw,330px)}
+.bar{width:min(64vw,230px); height:3px; background:rgba(42,85,114,.6); overflow:hidden}
+.bar i{display:block; height:100%; width:0; background:var(--gold); transition:width .3s}
+.boot small{color:var(--mist); font-family:var(--voice); font-size:17px; letter-spacing:.02em}
+
+.cue{
+  position:fixed; z-index:14; left:50%; translate:-50% 0;
+  bottom:calc(env(safe-area-inset-bottom,0px) + 22px);
+  display:flex; flex-direction:column; align-items:center; gap:9px;
+  color:var(--mist); transition:opacity .4s;
+}
+.cue img{width:13px; opacity:.7; animation:cue 2.4s ease-in-out infinite}
+@keyframes cue{0%,100%{transform:translateY(0); opacity:.4} 50%{transform:translateY(5px); opacity:.85}}
+@media (max-width:860px){ .cue{display:none} }
+@media (prefers-reduced-motion: reduce){ .cue img{animation:none} .panel{transition:opacity .25s} }
+</style>
+
+<canvas id="sea"></canvas>
+<div class="vignette"></div>
+<div id="track"></div>
+
+<header class="masthead">
+  <span class="mark"><img src="assets/logo.webp" alt="Skillstorm" width="900" height="233"></span>
+  <span class="spacer"></span>
+  <div class="lang" role="group" aria-label="Language">
+    <button type="button" id="lang-ru" aria-pressed="true">Рус</button>
+    <i></i>
+    <button type="button" id="lang-en" aria-pressed="false">Eng</button>
+  </div>
+</header>
+
+<h1 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Skillstorm</h1>
+
+<div id="worldLabels" aria-hidden="true"></div>
+
+<div class="panels" id="panels">
+
+  <article class="panel left" data-island="landing">
+    <span class="watermark" data-i="g.landing">БЕРЕГ</span>
+    <p class="where ui"><span data-i="p1.where">Высадка</span></p>
+    <h2 data-i="p1.h">Сюда приходят ни с чем</h2>
+    <p data-i="p1.a">Лодки подходят к острову на рассвете. У каждого холщовая рубаха и то, что успел взять в руки. Через восемь минут остров достанется одному.</p>
+    <p data-i="p1.b">Дальше по воде — ещё пять островов, и каждый расскажет свою часть. Плыви.</p>
+    <div class="act">
+      <button class="plate" id="sailBtn" data-i="p1.cta">В поход</button>
+      <span class="hint ui" data-i="p1.hint">Шесть островов впереди</span>
+    </div>
+    <div class="facts ui">
+      <span data-i="p1.f1">Матч 5–8 минут</span>
+      <span data-i="p1.f2">ПК и Android</span>
+      <span data-i="p1.f3">В разработке</span>
+    </div>
+  </article>
+
+  <article class="panel right" data-island="combat">
+    <span class="watermark" data-i="g.combat">БОЙ</span>
+    <p class="where ui"><span data-i="p2.where">Как это играется</span></p>
+    <h2 data-i="p2.h">Клинок работает сам</h2>
+    <p data-i="p2.a">Пока стоишь — бьёшь. Шагнул — перестал. Вся игра живёт между этими двумя состояниями: добить и поймать стрелу в спину или разорвать дистанцию и отдать темп.</p>
+    <p data-i="p2.b">Внизу настоящий бой на моделях из игры. Возьми управление — он твой.</p>
+    <div class="act">
+      <button class="plate" id="playBtn" data-i="p2.cta">Взять управление</button>
+      <span class="hint ui" data-i="p2.hint">WASD или пальцем</span>
+    </div>
+  </article>
+
+  <article class="panel left" data-island="skills">
+    <span class="watermark" data-i="g.skills">НАВЫКИ</span>
+    <p class="where ui"><span data-i="p3.where">Сборка билда</span></p>
+    <h2 data-i="p3.h">Два навыка складываются в третий</h2>
+    <p data-i="p3.a">Каждый уровень предлагает три. Нужная пара срастается в именную синергию, и бой меняется прямо под руками — без паузы, без меню.</p>
+    <div class="tally">
+      <div><b>28</b><span data-i="p3.t1">навыков</span></div>
+      <div><b>35</b><span data-i="p3.t2">синергий</span></div>
+    </div>
+    <div class="wall" id="wall" aria-label="Синергии"></div>
+  </article>
+
+  <article class="panel right" data-island="storm">
+    <span class="watermark" data-i="g.storm">ШТОРМ</span>
+    <p class="where ui"><span data-i="p4.where">Зона</span></p>
+    <h2 data-i="p4.h">Шторм решает, где будет бой</h2>
+    <p data-i="p4.a">Край острова затягивает туманом с молниями. Снаружи здоровье утекает, круг сжимается — и тот, кто отсиделся в кустах, выходит в центр ровно к тем, кто дрался всё это время.</p>
+    <p data-i="p4.b">Бродячие боссы и волны мобов у лучшего лута держат середину матча, где обычно провисает любая королевская битва.</p>
+  </article>
+
+  <article class="panel left" data-island="forge">
+    <span class="watermark" data-i="g.forge">КУЗНЯ</span>
+    <p class="where ui"><span data-i="p5.where">Между походами</span></p>
+    <h2 data-i="p5.h">Между походами — своё королевство</h2>
+    <p data-i="p5.a">Остров отдаёт ресурсы, из них растут персонаж и снаряжение: кузня, полный комплект брони, владение оружием, место в рейтинге региона. Следующий остров всегда злее прошлого.</p>
+    <div class="shots">
+      <img src="assets/ui-map.webp" alt="Карта владений" width="560" height="995" loading="lazy">
+      <img src="assets/ui-forge.webp" alt="Кузня" width="560" height="995" loading="lazy">
+      <img src="assets/ui-equipment.webp" alt="Снаряжение" width="560" height="995" loading="lazy">
+    </div>
+    <p class="note" data-i="p5.cap">Экраны из текущей сборки</p>
+  </article>
+
+  <article class="panel right" data-island="devlog">
+    <span class="watermark" data-i="g.devlog">ВЕРФЬ</span>
+    <p class="where ui"><span data-i="p6.where">Кто делает</span></p>
+    <h2 data-i="p6.h">Игру строит один человек и несколько ИИ-агентов</h2>
+    <p data-i="p6.a">Код, тесты, подгонка брони и нарезка роликов идут в нескольких сессиях разом. Короткие ролики о процессе выходят регулярно.</p>
+    <div class="clip">
+      <video src="assets/devlog-clip.mp4" poster="assets/devlog-poster.webp" muted loop playsinline controls preload="none" width="540" height="960"></video>
+    </div>
+    <div class="links">
+      <a href="https://www.youtube.com/shorts/q3eeCsoFgDE" target="_blank" rel="noopener"><b>YouTube</b><span>@NikitaGalochkin</span></a>
+      <a href="https://www.tiktok.com/@solodevich" target="_blank" rel="noopener"><b>TikTok</b><span>@solodevich</span></a>
+      <a href="https://www.instagram.com/reel/DegTsBmh_yy/" target="_blank" rel="noopener"><b>Instagram</b><span>@your_sillity</span></a>
+    </div>
+    <p class="note" data-i="p6.foot">Bella Games · даты релиза пока нет</p>
+  </article>
+</div>
+
+<aside class="chart">
+  <h3><img src="assets/ui/T_UI_IconMap.png" alt=""><span data-i="chart.h">Архипелаг</span></h3>
+  <svg id="chartSvg" viewBox="0 0 140 68" aria-hidden="true"></svg>
+</aside>
+
+<div class="hud" id="hud">
+  <div class="hud-row">
+    <div class="hp"><i id="hpFill"></i></div>
+    <span class="stat" id="statKills"></span>
+    <span class="stat" id="statFoes"></span>
+    <button class="ghost leave" id="exitBtn" data-i="play.exit">Выйти</button>
+  </div>
+</div>
+
+<div class="stick" id="stick"><i id="stickNub"></i></div>
+
+<div class="verdict" id="verdict">
+  <div class="in">
+    <h3 id="verdictTitle"></h3>
+    <p id="verdictLine"></p>
+    <button class="plate" id="againBtn" data-i="end.again">Ещё раз</button>
+  </div>
+</div>
+
+<div class="cue" id="cue">
+  <span class="ui" data-i="cue">Листай</span>
+  <img src="assets/ui/T_UI_IconArrow.png" alt="">
+</div>
+
+<div class="boot" id="boot">
+  <div class="in">
+    <div class="crest">
+      <img class="decor" src="assets/ui/DecorLeft.png" alt="">
+      <img class="logo" src="assets/logo.webp" alt="Skillstorm" width="900" height="233">
+      <img class="decor flip" src="assets/ui/DecorRight.png" alt="">
+    </div>
+    <div class="bar"><i id="bootBar"></i></div>
+    <small id="bootText" data-i="boot.load">Поднимаем паруса…</small>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./assets/vendor/three.webgpu.min.js",
+    "three/gltf": "./assets/vendor/GLTFLoader.js",
+    "three/draco": "./assets/vendor/DRACOLoader.js",
+    "three/tsl": "./assets/vendor/three.webgpu.min.js",
+    "three/bloom": "./assets/vendor/BloomNode.js",
+    "three/blur": "./assets/vendor/GaussianBlurNode.js",
+    "three/skeleton": "./assets/vendor/SkeletonUtils.js",
+    "three/bufferutils": "./assets/utils/BufferGeometryUtils.js"
+  }
+}
+</script>
+<script type="module" src="app.js"></script>

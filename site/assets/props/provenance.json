@@ -1,0 +1,408 @@
+{
+  "about": "Provenance for every model in site/assets/props/. Licence rule for this set: CC0, Fab Standard or Quaternius QAL only, checked per asset.",
+  "conventions": {
+    "units": "metres",
+    "up": "Y (glTF default); models face +Z",
+    "pivot": "on the ground at the base of the object (y = 0). Exceptions, all deliberate: boats pivot at the WATERLINE so the hull sits below y = 0; pier_* put the walking surface at y = 0 with the piles hanging to about y = -2.3 so deck runs stay level over water; lighthouse, watchtower, stilt_hut and some ruins dip a little below 0 where a rock footing, pile or fallen block is meant to bed into the ground.",
+    "shading": "flat, vertex colours only (COLOR_0), no textures, one material per model",
+    "palette": {
+      "wall": "#f0ece2",
+      "roof": "#b8452f",
+      "limestone": "#a7aeb6",
+      "conifer": "#2f6f3c",
+      "midGreen": "#4e9f4a",
+      "wood": "#6d4c2f",
+      "sail": "#f2e9d6",
+      "sand": "#eedcaa"
+    },
+    "budgets": {
+      "building": 2500,
+      "boat": 1500,
+      "tree": 600
+    }
+  },
+  "packs_used": [
+    {
+      "source_url": "https://kenney.nl/assets/nature-kit",
+      "licence": "CC0 1.0 Universal (public domain dedication)",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "name": "Kenney Nature Kit",
+      "local_copy": "vendor-assets/kenney-nature/pack.zip",
+      "licence_file": "site/assets/kit/KENNEY-LICENSE.txt"
+    }
+  ],
+  "packs_evaluated_not_used": [
+    {
+      "name": "Kenney Pirate Kit",
+      "source_url": "https://kenney.nl/assets/pirate-kit",
+      "licence": "CC0 1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "local_copy": "vendor-assets/kenney-pirate/",
+      "why_not": "its ships are square-rigged galleons and its models are mapped to a shared colormap texture; the key art's boat is an open clinker longboat and this set is vertex-colour only"
+    },
+    {
+      "name": "Kenney Castle Kit",
+      "source_url": "https://kenney.nl/assets/castle-kit",
+      "licence": "CC0 1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "local_copy": "vendor-assets/kenney-castle/",
+      "why_not": "fortress walls and siege engines, not the Mediterranean harbour town and weathered watchtower the reference painting shows; also texture-atlas based"
+    }
+  ],
+  "files": [
+    {
+      "file": "boat_sail_a.glb",
+      "triangles": 1134,
+      "source_url": "built for this site with tools_props/make_boats.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "boat_sail_b.glb",
+      "triangles": 1362,
+      "source_url": "built for this site with tools_props/make_boats.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "boat_sail_c.glb",
+      "triangles": 670,
+      "source_url": "built for this site with tools_props/make_boats.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "bush_round.glb",
+      "triangles": 99,
+      "source_url": "built for this site with tools_props/make_forest.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "bush_small.glb",
+      "triangles": 99,
+      "source_url": "built for this site with tools_props/make_forest.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "conifer_l.glb",
+      "triangles": 98,
+      "source_url": "https://kenney.nl/assets/nature-kit",
+      "licence": "CC0 1.0 Universal (public domain dedication)",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "origin": "reused",
+      "derived_from": "Nature Kit model 'tree_pineTallC'",
+      "changes": "recoloured to the Skillstorm palette by material name, baked to a COLOR_0 vertex-colour attribute, merged to one mesh with one material, pivot moved to the base and scaled to a real-world height (tools_props/make_forest.py)"
+    },
+    {
+      "file": "conifer_m.glb",
+      "triangles": 230,
+      "source_url": "https://kenney.nl/assets/nature-kit",
+      "licence": "CC0 1.0 Universal (public domain dedication)",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "origin": "reused",
+      "derived_from": "Nature Kit model 'tree_pineDefaultA'",
+      "changes": "recoloured to the Skillstorm palette by material name, baked to a COLOR_0 vertex-colour attribute, merged to one mesh with one material, pivot moved to the base and scaled to a real-world height (tools_props/make_forest.py)"
+    },
+    {
+      "file": "conifer_round.glb",
+      "triangles": 204,
+      "source_url": "https://kenney.nl/assets/nature-kit",
+      "licence": "CC0 1.0 Universal (public domain dedication)",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "origin": "reused",
+      "derived_from": "Nature Kit model 'tree_pineRoundA'",
+      "changes": "recoloured to the Skillstorm palette by material name, baked to a COLOR_0 vertex-colour attribute, merged to one mesh with one material, pivot moved to the base and scaled to a real-world height (tools_props/make_forest.py)"
+    },
+    {
+      "file": "conifer_s.glb",
+      "triangles": 86,
+      "source_url": "https://kenney.nl/assets/nature-kit",
+      "licence": "CC0 1.0 Universal (public domain dedication)",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "origin": "reused",
+      "derived_from": "Nature Kit model 'tree_pineSmallB'",
+      "changes": "recoloured to the Skillstorm palette by material name, baked to a COLOR_0 vertex-colour attribute, merged to one mesh with one material, pivot moved to the base and scaled to a real-world height (tools_props/make_forest.py)"
+    },
+    {
+      "file": "conifer_spire_l.glb",
+      "triangles": 156,
+      "source_url": "built for this site with tools_props/make_forest.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "conifer_spire_m.glb",
+      "triangles": 156,
+      "source_url": "built for this site with tools_props/make_forest.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "conifer_spire_s.glb",
+      "triangles": 121,
+      "source_url": "built for this site with tools_props/make_forest.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "conifer_spire_xl.glb",
+      "triangles": 191,
+      "source_url": "built for this site with tools_props/make_forest.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "conifer_xl.glb",
+      "triangles": 78,
+      "source_url": "https://kenney.nl/assets/nature-kit",
+      "licence": "CC0 1.0 Universal (public domain dedication)",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "origin": "reused",
+      "derived_from": "Nature Kit model 'tree_pineTallA'",
+      "changes": "recoloured to the Skillstorm palette by material name, baked to a COLOR_0 vertex-colour attribute, merged to one mesh with one material, pivot moved to the base and scaled to a real-world height (tools_props/make_forest.py)"
+    },
+    {
+      "file": "house_white_a.glb",
+      "triangles": 392,
+      "source_url": "built for this site with tools_props/make_buildings.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "house_white_b.glb",
+      "triangles": 616,
+      "source_url": "built for this site with tools_props/make_buildings.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "house_white_c.glb",
+      "triangles": 624,
+      "source_url": "built for this site with tools_props/make_buildings.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "lighthouse.glb",
+      "triangles": 624,
+      "source_url": "built for this site with tools_props/make_buildings.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "mooring_post.glb",
+      "triangles": 114,
+      "source_url": "built for this site with tools_props/make_harbour.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "mooring_post_stone.glb",
+      "triangles": 92,
+      "source_url": "built for this site with tools_props/make_harbour.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "palm_bend.glb",
+      "triangles": 200,
+      "source_url": "https://kenney.nl/assets/nature-kit",
+      "licence": "CC0 1.0 Universal (public domain dedication)",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "origin": "reused",
+      "derived_from": "Nature Kit model 'tree_palmBend'",
+      "changes": "recoloured to the Skillstorm palette by material name, baked to a COLOR_0 vertex-colour attribute, merged to one mesh with one material, pivot moved to the base and scaled to a real-world height (tools_props/make_forest.py)"
+    },
+    {
+      "file": "palm_fan_mid.glb",
+      "triangles": 506,
+      "source_url": "built for this site with tools_props/make_forest.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "palm_fan_short.glb",
+      "triangles": 468,
+      "source_url": "built for this site with tools_props/make_forest.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "palm_fan_tall.glb",
+      "triangles": 544,
+      "source_url": "built for this site with tools_props/make_forest.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "palm_short.glb",
+      "triangles": 190,
+      "source_url": "https://kenney.nl/assets/nature-kit",
+      "licence": "CC0 1.0 Universal (public domain dedication)",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "origin": "reused",
+      "derived_from": "Nature Kit model 'tree_palmShort'",
+      "changes": "recoloured to the Skillstorm palette by material name, baked to a COLOR_0 vertex-colour attribute, merged to one mesh with one material, pivot moved to the base and scaled to a real-world height (tools_props/make_forest.py)"
+    },
+    {
+      "file": "palm_tall.glb",
+      "triangles": 336,
+      "source_url": "https://kenney.nl/assets/nature-kit",
+      "licence": "CC0 1.0 Universal (public domain dedication)",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "origin": "reused",
+      "derived_from": "Nature Kit model 'tree_palmDetailedTall'",
+      "changes": "recoloured to the Skillstorm palette by material name, baked to a COLOR_0 vertex-colour attribute, merged to one mesh with one material, pivot moved to the base and scaled to a real-world height (tools_props/make_forest.py)"
+    },
+    {
+      "file": "pier_corner.glb",
+      "triangles": 308,
+      "source_url": "built for this site with tools_props/make_harbour.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "pier_end.glb",
+      "triangles": 372,
+      "source_url": "built for this site with tools_props/make_harbour.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "pier_straight.glb",
+      "triangles": 236,
+      "source_url": "built for this site with tools_props/make_harbour.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "rock_mossy.glb",
+      "triangles": 80,
+      "source_url": "https://kenney.nl/assets/nature-kit",
+      "licence": "CC0 1.0 Universal (public domain dedication)",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "author": "Kenney (kenney.nl)",
+      "origin": "reused",
+      "derived_from": "Nature Kit model 'rock_largeA'",
+      "changes": "recoloured to the Skillstorm palette by material name, baked to a COLOR_0 vertex-colour attribute, merged to one mesh with one material, pivot moved to the base and scaled to a real-world height (tools_props/make_forest.py)"
+    },
+    {
+      "file": "ruin_arch.glb",
+      "triangles": 255,
+      "source_url": "built for this site with tools_props/make_harbour.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "ruin_arch_broken.glb",
+      "triangles": 246,
+      "source_url": "built for this site with tools_props/make_harbour.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "ruin_column.glb",
+      "triangles": 158,
+      "source_url": "built for this site with tools_props/make_harbour.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "ruin_column_broken.glb",
+      "triangles": 173,
+      "source_url": "built for this site with tools_props/make_harbour.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "ruin_wall.glb",
+      "triangles": 569,
+      "source_url": "built for this site with tools_props/make_harbour.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "stilt_hut.glb",
+      "triangles": 443,
+      "source_url": "built for this site with tools_props/make_buildings.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    },
+    {
+      "file": "watchtower.glb",
+      "triangles": 648,
+      "source_url": "built for this site with tools_props/make_buildings.py (Blender 5.2, headless)",
+      "licence": "original work for Skillstorm",
+      "licence_url": "",
+      "author": "Skillstorm props stream",
+      "origin": "made"
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>props selftest</title>
+<style>body{margin:0;background:#8fb0c8}#log{position:fixed;left:8px;top:8px;font:12px monospace;color:#fff;white-space:pre;z-index:9}</style>
+<div id="log">loading...</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "../vendor/three.webgpu.min.js",
+    "three/gltf": "../vendor/GLTFLoader.js",
+    "three/bufferutils": "../utils/BufferGeometryUtils.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { loadProps, PropInstancer, PROP_SETS, ALL_PROPS, scatterForest,
+         layoutPier, mooredBoats, layoutHarbourTown, scatterRuins,
+         propsMaterial, matrixOf } from '../../props.js';
+
+const log = (s) => { document.getElementById('log').textContent += '\n' + s; };
+const lines = [];
+try {
+  const t0 = performance.now();
+  const props = await loadProps(ALL_PROPS);
+  const names = Object.keys(props);
+  lines.push('loaded ' + names.length + '/' + ALL_PROPS.length + ' in ' + Math.round(performance.now() - t0) + 'ms');
+  const missing = ALL_PROPS.filter((n) => !props[n]);
+  if (missing.length) lines.push('MISSING: ' + missing.join(','));
+  let bad = [];
+  for (const n of names) {
+    const g = props[n];
+    if (!g.attributes.color) bad.push(n + ':nocolor');
+    if (!g.attributes.normal) bad.push(n + ':nonormal');
+    if (g.groups && g.groups.length) bad.push(n + ':groups');
+    const bb = g.boundingBox;
+    const h = (bb.max.y - bb.min.y).toFixed(2);
+    // Deliberate exceptions to "base at y = 0", see assets/props/provenance.json:
+    // boats pivot at the waterline, pier decks pivot at the walking surface, and a
+    // few props bed a footing or a fallen block into the ground.
+    const SUNK = { boat_sail_a: 0.8, boat_sail_b: 1.0, boat_sail_c: 0.8,
+                   lighthouse: 0.15, watchtower: 0.15, stilt_hut: 1.1,
+                   ruin_column_broken: 0.4, ruin_arch: 0.1, ruin_arch_broken: 0.1,
+                   ruin_wall: 0.1 };
+    const allow = n.startsWith('pier_') ? 99 : (SUNK[n] || 0.06);
+    if (Math.abs(bb.min.y) > allow) bad.push(n + ':pivot(' + bb.min.y.toFixed(2) + ')');
+    lines.push(n.padEnd(20) + ' tris=' + String(g.attributes.position.count / 3).padStart(5)
+      + '  h=' + String(h).padStart(6)
+      + '  y[' + bb.min.y.toFixed(2) + ',' + bb.max.y.toFixed(2) + ']'
+      + '  x[' + bb.min.x.toFixed(2) + ',' + bb.max.x.toFixed(2) + ']'
+      + '  z[' + bb.min.z.toFixed(2) + ',' + bb.max.z.toFixed(2) + ']');
+  }
+
+  // helpers
+  const sampleHeight = (x, z) => {
+    const r = Math.hypot(x, z);
+    return 34 * Math.exp(-(r * r) / (2 * 40 * 40)) - 3.5
+      + 2.2 * Math.sin(x * 0.11) * Math.cos(z * 0.13);
+  };
+  const forest = scatterForest({ sampleHeight, bounds: { cx: 0, cz: 0, radius: 85 },
+                                 count: 1400, seed: 4 });
+  lines.push('scatterForest -> ' + forest.length + ' placements');
+  const counts = {};
+  for (const p of forest) counts[p.name] = (counts[p.name] || 0) + 1;
+  lines.push('  ' + JSON.stringify(counts));
+  const pier = layoutPier({ from: { x: 18, z: 26 }, angle: 0.8, length: 18, deckY: 1.2,
+                            end: true, bollardEvery: 2, seed: 2 });
+  lines.push('layoutPier -> ' + pier.placements.length + ' pieces, tip '
+    + pier.tip.x.toFixed(1) + ',' + pier.tip.z.toFixed(1));
+  const boats = mooredBoats(pier, { seaY: 0, seed: 9 });
+  lines.push('mooredBoats -> ' + boats.length);
+  const town = layoutHarbourTown({
+    shoreAt: (t) => ({ x: -40 + t * 60, z: 34, angle: 0 }), sampleHeight, count: 6, seed: 3 });
+  lines.push('layoutHarbourTown -> ' + town.length);
+  const ruins = scatterRuins({ sampleHeight, x: -20, z: -18, radius: 10, seed: 6 });
+  lines.push('scatterRuins -> ' + ruins.length);
+
+  // build a scene so instancing and matrices are actually exercised
+  const scene = new THREE.Scene();
+  const inst = new PropInstancer(props, propsMaterial());
+  inst.placeAll(forest).placeAll(pier.placements).placeAll(boats)
+      .placeAll(town).placeAll(ruins);
+  const meshes = inst.commit(scene);
+  lines.push('commit -> ' + meshes.length + ' InstancedMesh, '
+    + meshes.reduce((a, m) => a + m.count, 0) + ' instances');
+  if (bad.length) lines.push('CHECKS FAILED: ' + bad.join(' '));
+  else lines.push('CHECKS OK');
+  lines.push('SELFTEST DONE');
+} catch (e) {
+  lines.push('SELFTEST ERROR: ' + (e && e.stack || e));
+}
+document.getElementById('log').textContent = lines.join('\n');
+window.__selftest = lines.join('\n');
+console.log(lines.join('\n'));
+</script>

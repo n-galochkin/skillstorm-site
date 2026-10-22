@@ -1,0 +1,160 @@
+{
+  "note": "Island meshes for the Skillstorm promo site. Metres, Y up, origin at the island centre, y=0 is the waterline. Vertex colours only, one material, flat shaded. <id>_height.png is a 256x256 16-bit greyscale heightmap over the island's bounding square (size metres on a side, centred on the origin). Column 0 is x = -size/2, row 0 is z = -size/2, both in the glTF frame: x = -size/2 + col/(res-1)*size, z = -size/2 + row/(res-1)*size. height = minHeight + (R/65535)*(maxHeight-minHeight).",
+  "islands": [
+    {
+      "id": "landing",
+      "radius": 26,
+      "size": 76,
+      "maxHeight": 10.972,
+      "minHeight": -6.0,
+      "triangles": 4323,
+      "kind": "hero",
+      "mesh": "landing.glb",
+      "height": "landing_height.png"
+    },
+    {
+      "id": "combat",
+      "radius": 31,
+      "size": 86,
+      "maxHeight": 13.212,
+      "minHeight": -6.0,
+      "triangles": 5915,
+      "kind": "hero",
+      "mesh": "combat.glb",
+      "height": "combat_height.png",
+      "openGround": 38.4
+    },
+    {
+      "id": "skills",
+      "radius": 27,
+      "size": 78,
+      "maxHeight": 18.81,
+      "minHeight": -6.0,
+      "triangles": 5571,
+      "kind": "hero",
+      "mesh": "skills.glb",
+      "height": "skills_height.png"
+    },
+    {
+      "id": "storm",
+      "radius": 29,
+      "size": 82,
+      "maxHeight": 17.934,
+      "minHeight": -6.0,
+      "triangles": 4977,
+      "kind": "hero",
+      "mesh": "storm.glb",
+      "height": "storm_height.png"
+    },
+    {
+      "id": "forge",
+      "radius": 31,
+      "size": 86,
+      "maxHeight": 13.654,
+      "minHeight": -6.0,
+      "triangles": 5855,
+      "kind": "hero",
+      "mesh": "forge.glb",
+      "height": "forge_height.png"
+    },
+    {
+      "id": "devlog",
+      "radius": 25,
+      "size": 72,
+      "maxHeight": 9.222,
+      "minHeight": -6.0,
+      "triangles": 3765,
+      "kind": "hero",
+      "mesh": "devlog.glb",
+      "height": "devlog_height.png"
+    },
+    {
+      "id": "islet_01",
+      "radius": 9,
+      "size": 28,
+      "maxHeight": 13.635,
+      "minHeight": -5.5,
+      "triangles": 1598,
+      "kind": "islet",
+      "mesh": "islet_01.glb",
+      "height": "islet_01_height.png"
+    },
+    {
+      "id": "islet_02",
+      "radius": 7,
+      "size": 22,
+      "maxHeight": 4.092,
+      "minHeight": -5.0,
+      "triangles": 1532,
+      "kind": "islet",
+      "mesh": "islet_02.glb",
+      "height": "islet_02_height.png"
+    },
+    {
+      "id": "islet_03",
+      "radius": 11,
+      "size": 32,
+      "maxHeight": 5.931,
+      "minHeight": -5.5,
+      "triangles": 2436,
+      "kind": "islet",
+      "mesh": "islet_03.glb",
+      "height": "islet_03_height.png"
+    },
+    {
+      "id": "islet_04",
+      "radius": 8,
+      "size": 24,
+      "maxHeight": 8.827,
+      "minHeight": -5.0,
+      "triangles": 1558,
+      "kind": "islet",
+      "mesh": "islet_04.glb",
+      "height": "islet_04_height.png"
+    },
+    {
+      "id": "islet_05",
+      "radius": 10,
+      "size": 30,
+      "maxHeight": 2.707,
+      "minHeight": -4.6,
+      "triangles": 1430,
+      "kind": "islet",
+      "mesh": "islet_05.glb",
+      "height": "islet_05_height.png"
+    },
+    {
+      "id": "islet_06",
+      "radius": 6,
+      "size": 20,
+      "maxHeight": 3.479,
+      "minHeight": -4.6,
+      "triangles": 1685,
+      "kind": "islet",
+      "mesh": "islet_06.glb",
+      "height": "islet_06_height.png"
+    },
+    {
+      "id": "islet_07",
+      "radius": 7,
+      "size": 22,
+      "maxHeight": 10.489,
+      "minHeight": -5.0,
+      "triangles": 1826,
+      "kind": "islet",
+      "mesh": "islet_07.glb",
+      "height": "islet_07_height.png"
+    },
+    {
+      "id": "islet_08",
+      "radius": 12,
+      "size": 34,
+      "maxHeight": 7.013,
+      "minHeight": -5.8,
+      "triangles": 2630,
+      "kind": "islet",
+      "mesh": "islet_08.glb",
+      "height": "islet_08_height.png"
+    }
+  ]
+}

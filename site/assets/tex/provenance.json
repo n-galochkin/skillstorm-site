@@ -1,0 +1,60 @@
+{
+  "note": "Water, sky, cloud and bird modules (water.js, sky.js, atmosphere.js). Every texture these modules use is generated in the browser at start-up by code in water.js / atmosphere.js (tileable value-noise fBm, a detail normal map, a cloud mask, a cloud puff and the baked shore-distance field). No third-party image, model or shader asset is shipped, so this file lists what was consulted rather than what was copied.",
+  "assets": [],
+  "generated_at_runtime": [
+    {
+      "file": "(runtime) detail normal map 256x256 RGBA8",
+      "source_url": "site/water.js makeDetailNormalTexture()",
+      "licence": "own work, same licence as the site",
+      "licence_url": "",
+      "author": "Skillstorm site"
+    },
+    {
+      "file": "(runtime) cloud mask 256x256 RGBA8",
+      "source_url": "site/water.js makeCloudMaskTexture()",
+      "licence": "own work, same licence as the site",
+      "licence_url": "",
+      "author": "Skillstorm site"
+    },
+    {
+      "file": "(runtime) cloud puff 192x192 RGBA8",
+      "source_url": "site/atmosphere.js makePuffTexture()",
+      "licence": "own work, same licence as the site",
+      "licence_url": "",
+      "author": "Skillstorm site"
+    },
+    {
+      "file": "(runtime) shore distance field, RGBA16F, ~0.7 m per texel",
+      "source_url": "site/water.js buildShoreField()",
+      "licence": "own work, same licence as the site",
+      "licence_url": "",
+      "author": "Skillstorm site"
+    }
+  ],
+  "consulted": [
+    {
+      "file": "examples/jsm/objects/WaterMesh.js (three.js r170)",
+      "source_url": "https://raw.githubusercontent.com/mrdoob/three.js/r170/examples/jsm/objects/WaterMesh.js",
+      "licence": "MIT",
+      "licence_url": "https://github.com/mrdoob/three.js/blob/r170/LICENSE",
+      "author": "three.js authors",
+      "used_for": "Reference for how a NodeMaterial takes a custom fragmentNode under WebGPURenderer, and for r170 TSL idioms. Not shipped: WaterMesh is a flat reflector with a scrolling normal map and has no wave displacement, no depth colour and no surf, so water.js is written from scratch."
+    },
+    {
+      "file": "examples/jsm/objects/SkyMesh.js (three.js r170)",
+      "source_url": "https://raw.githubusercontent.com/mrdoob/three.js/r170/examples/jsm/objects/SkyMesh.js",
+      "licence": "MIT",
+      "licence_url": "https://github.com/mrdoob/three.js/blob/r170/LICENSE",
+      "author": "three.js authors (Preetham model, zz85)",
+      "used_for": "Reference for the vertexNode trick that pins a sky dome to the far plane (position.z = position.w), and for varyingProperty usage. The Preetham scattering itself is not used: the key art's sky is a painted gradient, so sky.js is a hand-tuned three-stop gradient."
+    },
+    {
+      "file": "T_ArchipelagoSource.png",
+      "source_url": "C:/Projects/SkillStorm/Content/SourceArt/StartScreen/T_ArchipelagoSource.png",
+      "licence": "project art, not redistributed with the site",
+      "licence_url": "",
+      "author": "Skillstorm",
+      "used_for": "Colour reference only. Sea, shelf, foam, haze and sky colours were sampled from it and then inverted through the ACES tone-mapping curve so the rendered result matches the painting."
+    }
+  ]
+}
