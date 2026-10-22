@@ -255,7 +255,7 @@ async function boot() {
      gives it a push in that direction (so the visitor sees at once that it took), and the
      spring then carries it on to the next island and settles there. A finger drags the
      page like a rubber band; letting go either sails on or springs back. */
-  const W = 5.2;                // spring stiffness: about 1.2 s from island to island
+  const W = 3.9;                // spring stiffness: about 1.7 s, long enough for a manoeuvre to read
   let sailing = null;           // { to } while the page is gliding
   let pos = 0, vel = 0;
   let quietUntil = 0;           // a trackpad keeps sending wheel events after a flick
@@ -459,6 +459,15 @@ async function boot() {
     if (keys.has('s') || keys.has('arrowdown')) y += 1;
     if (pointerId !== null) { x += dragX; y += dragY; }
     fight.setInput(THREE.MathUtils.clamp(x, -1, 1), THREE.MathUtils.clamp(y, -1, 1));
+  }
+
+  /* ---- the mouse lean: the frame drifts a little toward the pointer (mouse only) ---- */
+  if (matchMedia('(pointer:fine)').matches && !reduced) {
+    world.leanTarget = new THREE.Vector2();
+    addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse' || playing) { world.leanTarget.set(0, 0); return; }
+      world.leanTarget.set(e.clientX / innerWidth * 2 - 1, e.clientY / innerHeight * 2 - 1);
+    }, { passive: true });
   }
 
   /* ---- size ---- */

@@ -31,6 +31,10 @@ export const LIGHT = (() => {
   return narrow || weak;
 })();
 
+/* the voyage's flights, one per leg: landing->fight, fight->skills, skills->storm,
+   storm->forge, forge->devlog (see World.flight) */
+const FLIGHTS = ['bank', 'skim', 'climbSpiral', 'dive', 'orbit'];
+
 /* --------------------------------------------------------------- textures */
 function radialTexture(stops, size = 128) {
   const c = document.createElement('canvas');
@@ -608,17 +612,91 @@ export class World {
         const local = THREE.MathUtils.clamp((target - acc) / seg.w, 0, 1);
         if (seg.kind === 'hold') return { u: seg.i / (n - 1), station: seg.i, local, moving: false };
         const eased = local * local * (3 - 2 * local);
-        return { u: (seg.i + eased) / (n - 1), station: eased < 0.5 ? seg.i : seg.i + 1, local, moving: true };
+        return { u: (seg.i + eased) / (n - 1), station: eased < 0.5 ? seg.i : seg.i + 1, local, moving: true, leg: seg.i, e: eased };
       }
       acc += seg.w;
     }
     return { u: 1, station: n - 1, local: 1, moving: false };
   }
 
+  /* One leg of the voyage as a staged flight. Every manoeuvre is an offset on the plain blend
+     between the two stations that vanishes at both ends (sin(pi*e) and friends), so a flight
+     always leaves from and lands on the exact hold over its island. */
+  flight(leg, e) {
+    const A = this.stationFor(ISLANDS[leg]), B = this.stationFor(ISLANDS[leg + 1]);
+    const LA = new THREE.Vector3(ISLANDS[leg].pos[0], 0, ISLANDS[leg].pos[1]);
+    const LB = new THREE.Vector3(ISLANDS[leg + 1].pos[0], 0, ISLANDS[leg + 1].pos[1]);
+    const pos = A.clone().lerp(B, e), look = LA.clone().lerp(LB, e);
+    const dir = new THREE.Vector3(B.x - A.x, 0, B.z - A.z);
+    const dist = dir.length();
+    dir.normalize();
+    const side = new THREE.Vector3(dir.z, 0, -dir.x);
+    const bump = Math.sin(Math.PI * e);
+    const smooth = (a, b, x) => THREE.MathUtils.smoothstep(x, a, b);
+    let roll = 0, fov = 0;
+    const turnAround = (centre, from, angle) => {
+      const v = from.clone().sub(centre), c = Math.cos(angle), s = Math.sin(angle);
+      return new THREE.Vector3(centre.x + v.x * c - v.z * s, from.y, centre.z + v.x * s + v.z * c);
+    };
+    switch (FLIGHTS[leg]) {
+      case 'bank': {        // a wide banked turn, leaning into the curve, eyes a little ahead
+        pos.addScaledVector(side, dist * 0.32 * bump);
+        pos.y += 34 * bump;
+        look.addScaledVector(dir, dist * 0.14 * bump);
+        roll = -15 * bump;
+        break;
+      }
+      case 'skim': {        // drop to the waves and race over the water, then pull up
+        const low = Math.pow(bump, 0.7);
+        pos.y = THREE.MathUtils.lerp(pos.y, 16, low);
+        // low over the waves the eyes go to the next island on the horizon, not to empty sea
+        const ahead = pos.clone().addScaledVector(dir, 120).lerp(LB, smooth(0.25, 0.8, e));
+        ahead.y = 6;
+        look.lerp(ahead, low);
+        roll = 5 * Math.sin(2 * Math.PI * e);
+        fov = 8 * low;
+        break;
+      }
+      case 'climbSpiral': { // climb over the clouds, then spiral down round the storm
+        pos.y += 300 * bump;
+        const below = pos.clone().addScaledVector(dir, 60);
+        below.y = 0;
+        look.lerp(below, smooth(0.05, 0.5, e) * (1 - smooth(0.55, 0.95, e)));
+        const spin = smooth(0.45, 1, e);
+        if (spin > 0) pos.copy(pos.clone().lerp(turnAround(LB, pos, -2.2 * (1 - e)), spin));
+        roll = -12 * bump;
+        fov = 12 * bump;
+        break;
+      }
+      case 'dive': {        // a short hop up, then a steep dive with a long lens
+        pos.y += 170 * Math.sin(Math.PI * Math.min(1, e * 1.6)) * (1 - e * 0.6);
+        roll = 9 * Math.sin(2 * Math.PI * e);
+        fov = -11 * bump;
+        break;
+      }
+      case 'orbit': {       // swing round the next island on the way in
+        const ring = turnAround(LB, B, -2.4 * (1 - e));
+        ring.y = B.y + 50 * bump;
+        pos.lerp(ring, smooth(0.1, 0.55, e));
+        roll = 10 * bump;
+        break;
+      }
+    }
+    return { pos, look, roll, fov };
+  }
+
   setCamera(p, elapsed) {
     const r = this.routeAt(p);
-    const pos = this.routeCurve.getPoint(r.u);
-    const look = this.lookCurve.getPoint(r.u);
+    let pos, look, roll = 0, fovKick = 0;
+    if (r.moving) ({ pos, look, roll, fov: fovKick } = this.flight(r.leg, r.e));
+    else {
+      pos = this.stationFor(ISLANDS[r.station]);
+      look = new THREE.Vector3(ISLANDS[r.station].pos[0], 0, ISLANDS[r.station].pos[1]);
+    }
+    // the frame leans a little toward the mouse, the way IVRESS's does (set by the page)
+    this.lean = this.lean || new THREE.Vector2();
+    this.lean.x = THREE.MathUtils.damp(this.lean.x, (this.leanTarget && this.leanTarget.x) || 0, 2.2, 1 / 60);
+    this.lean.y = THREE.MathUtils.damp(this.lean.y, (this.leanTarget && this.leanTarget.y) || 0, 2.2, 1 / 60);
     // holding over an island the camera hangs in the wind like a drone: a slow drift, a
     // gentle roll, and now and then a gust that leans it a little further. Several unrelated
     // sines, so the motion never repeats and never reads as a loop.
@@ -632,7 +710,14 @@ export class World {
     look.z += Math.cos(elapsed * 0.09 + 0.3) * 1.2 * sway;
     this.camera.position.copy(pos);
     this.camera.lookAt(look);
-    this.camera.rotateZ((Math.sin(elapsed * 0.23) * 0.55 + Math.sin(elapsed * 0.61 + 0.4) * 0.2 + gust * 0.6) * sway * Math.PI / 180);
+    // the mouse lean: slide along the camera's own right and up, a few metres at most
+    const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
+    this.camera.position.addScaledVector(right, this.lean.x * 7).addScaledVector(up, -this.lean.y * 4);
+    this.camera.rotateZ(((Math.sin(elapsed * 0.23) * 0.55 + Math.sin(elapsed * 0.61 + 0.4) * 0.2 + gust * 0.6) * sway + roll) * Math.PI / 180);
+    // a manoeuvre may widen or narrow the lens for a moment
+    const fov = (this.baseFov || this.camera.fov) + fovKick;
+    if (Math.abs(this.camera.fov - fov) > 0.01) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
     return r;
   }
 
@@ -665,7 +750,7 @@ export class World {
     // a tall screen is narrow across: a wider lens and a step back keep the whole
     // island in, where the desktop lens would show a slice of it
     const tall = w / h < 0.8;
-    this.camera.fov = tall ? 50 : 42;
+    this.camera.fov = this.baseFov = tall ? 50 : 42;
     const backOff = tall ? 1.45 : 1;
     if (backOff !== (this.backOff || 1)) {
       this.backOff = backOff;
