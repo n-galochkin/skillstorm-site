@@ -214,6 +214,10 @@ async function boot() {
   world.build(lang);
   buildWorldLabels();
   world.buildRoute();
+  world.sides = ISLANDS.map((s) => {
+    const p = document.querySelector(`.panel[data-island="${s.id}"]`);
+    return p && p.classList.contains('right') ? -1 : 1;
+  });
 
   const islandSpec = ISLANDS.find((i) => i.arena);
   // the fight stands on the flattest dry ground of its island, not at the centre,
@@ -256,93 +260,27 @@ async function boot() {
     for (let i = 1; i < n; i++) if (Math.abs(holdTop(i) - y) < Math.abs(holdTop(best) - y)) best = i;
     return best;
   };
-  /* A page turn is a timed glide that lifts off slowly and settles slowly, like a bird; the
-     chapter's text leaves at once, so the turn is felt the moment the wheel moves. A finger
-     drags the page like a rubber band; letting go either sails on or springs back. */
-  let sailing = null;           // { to } while the page is gliding
-  let pos = 0, vel = 0;
+  /* A page turn names the island to fly to; the camera flies there by itself (world.flyTo),
+     forward only, the way a bird would. The scroll jumps to that chapter's place on the track,
+     the chapter's text leaves at once and comes back when the camera lands. */
   let quietUntil = 0;           // a trackpad keeps sending wheel events after a flick
   let lastWheel = 0;
-
-  /* The glide: one continuous motion toward a target that may change on the way. It wants to
-     close the distance at a pace that slows as it nears (the soft landing), but its speed can
-     change only so fast (the gentle lift-off), and a new target never resets that speed - so a
-     second flick carries on, and a turn back slows, stops and reverses instead of snapping. */
-  const step = () => (maxScroll() / TOTAL) * (HOLD + TRAVEL);   // one island to the next, in px
-  let lastT = 0;
-  function glide(now) {
-    if (!sailing) return;
-    const dt = Math.min(0.05, (now - lastT) / 1000 || 0.016);
-    lastT = now;
-    const d = sailing.to - pos;
-    const L = step();
-    // cruise speed, a braking that ends in finite time (no creeping tail) and a gentler
-    // lift-off: about three seconds island to island, soft at both ends
-    const vMax = L * 0.55 * sailing.speed;
-    const brake = L * 0.42 * sailing.speed;
-    const want = Math.sign(d) * Math.min(vMax, Math.sqrt(2 * brake * Math.abs(d)));
-    const aMax = L * 0.8 * sailing.speed;
-    vel += THREE.MathUtils.clamp(want - vel, -aMax * dt, aMax * dt);
-    pos += vel * dt;
-    if (Math.abs(d) < 0.5 && Math.abs(vel) < 6) {
-      pos = sailing.to; scrollTo(0, pos);
-      sailing = null; vel = 0;
-      document.body.classList.remove('sailing');
-      quietUntil = performance.now() + 250;
-      return;
-    }
-    scrollTo(0, pos);
-    requestAnimationFrame(glide);
-  }
-
-  // more than one island away: the page goes there at once and the camera flies straight to it
-  let directTimer = 0;
-  function flyStraight(index) {
-    if (sailing) { sailing = null; vel = 0; }
-    const seconds = world.flyTo(index);
-    pos = holdTop(index);
-    scrollTo(0, pos);
-    const next = panels.find((p) => p.dataset.island === ISLANDS[index].id);
-    if (next) world.setTextSide(next.classList.contains('right') ? -1 : 1);
-    document.body.classList.add('sailing');
-    clearTimeout(directTimer);
-    directTimer = setTimeout(() => document.body.classList.remove('sailing'), seconds * 1000);
-  }
-
-  function sailTo(index, msOverride) {
+  let quietScroll = false;      // the page's own jumps are not the visitor's scrolling
+  function goTo(index) {
     index = THREE.MathUtils.clamp(index, 0, n - 1);
-    const to = holdTop(index);
-    if (reduced) { scrollTo(0, to); return; }
-    const from = sailing ? sailing.index : chapterAt(Math.min(scrollY, maxScroll()));
-    if (Math.abs(from - index) > 1 || scrollY > maxScroll() + 2) { flyStraight(index); return; }
-    if (!sailing && Math.abs(to - scrollY) < 2) return;
-    const fresh = !sailing;
-    if (fresh) { pos = scrollY; vel = 0; lastT = performance.now(); }
-    // a long way (home from the far end, a click on the chart) flies faster, not longer
-    const legs = Math.abs(chapterAt(pos) - index) || 1;
-    const speed = msOverride ? Math.max(1, legs / 2) : Math.max(1, legs * 0.7);
-    sailing = { to, index, speed };
-    // the frame starts sliding toward the next chapter's free side right away, so the island
-    // lands where it belongs instead of shifting once the text appears
-    const next = panels.find((p) => p.dataset.island === ISLANDS[index].id);
-    if (next) world.setTextSide(next.classList.contains('right') ? -1 : 1);
-    // the chapter's text leaves at once: the turn of the page is felt before the camera moves
-    document.body.classList.add('sailing');
-    if (fresh) requestAnimationFrame(glide);
+    const y = holdTop(index);
+    if (Math.abs(scrollY - y) > 1) { quietScroll = true; scrollTo(0, y); }
+    if (world.flyTo(index, elapsed)) document.body.classList.add('sailing');
   }
-  chartGoTo = (index) => sailTo(index);
+  chartGoTo = (index) => goTo(index);
 
   // inside the voyage, or in the first few pixels past it when heading back up
   const inVoyage = (dir) => scrollY < maxScroll() - 2 || (dir < 0 && scrollY <= maxScroll() + innerHeight * 0.15);
-  // the island the page is at or heading to
-  const current = () => (sailing ? sailing.index : chapterAt(Math.min(scrollY, maxScroll())));
   function page(dir) {
-    const here = current();
-    if (!sailing && dir > 0 && here === n - 1 && scrollY >= holdTop(n - 1) - 2) return false;   // on into the end section
-    if (dir < 0 && scrollY > maxScroll() + 2) { sailTo(n - 1); return true; }
-    const y = sailing ? sailing.to : scrollY;
-    const target = dir > 0 ? (y < holdTop(here) - 2 ? here : here + 1) : (y > holdTop(here) + 2 ? here : here - 1);
-    sailTo(target);
+    if (dir < 0 && scrollY > maxScroll() + 2) { goTo(n - 1); return true; }       // back from the end section
+    const here = world.target();
+    if (dir > 0 && here === n - 1) return false;                                   // on into the end section
+    goTo(here + dir);
     return true;
   }
 
@@ -352,43 +290,42 @@ async function boot() {
     if (!dir || !inVoyage(dir)) return;
     const now = performance.now();
     // only the first event of a gesture turns the page; the rest of it (a trackpad's long
-    // tail, a wheel's extra notches) is swallowed. Another gesture while gliding goes one further.
+    // tail, a wheel's extra notches) is swallowed. Another gesture while flying goes one further.
     const fresh = now - lastWheel > 220;
     lastWheel = now;
     if (!fresh || now < quietUntil) { e.preventDefault(); return; }
+    quietUntil = now + 350;
     if (page(dir)) e.preventDefault();
   }, { passive: false });
 
-  // touch: the page follows the finger (a little stiffer than the finger), then sails or springs back
-  let touchY = null, touchFrom = 0, touchLastY = 0, touchLastT = 0, touchV = 0, dragging = false;
-  addEventListener('touchstart', (e) => {
-    if (playing) { touchY = null; return; }
-    touchY = touchLastY = e.touches[0].clientY; touchLastT = performance.now(); touchV = 0;
-    touchFrom = scrollY; dragging = false;
-    if (sailing) { sailing = null; vel = 0; document.body.classList.remove('sailing'); }   // a finger on the glass catches the page
-  }, { passive: true });
+  // touch: a swipe is a page turn; the page itself does not slide under the finger
+  let touchY = null;
+  addEventListener('touchstart', (e) => { touchY = playing ? null : e.touches[0].clientY; }, { passive: true });
   addEventListener('touchmove', (e) => {
     if (touchY === null) return;
-    const y = e.touches[0].clientY, now = performance.now();
-    const dy = touchY - y;
-    const dir = Math.sign(dy);
-    if (!dir || !inVoyage(dir) || (!dragging && dir > 0 && chapterAt(scrollY) === n - 1 && scrollY >= holdTop(n - 1) - 2)) return;
-    e.preventDefault();
-    dragging = true;
-    touchV = (touchLastY - y) / Math.max(1, now - touchLastT) * 1000;
-    touchLastY = y; touchLastT = now;
-    scrollTo(0, touchFrom + dy * 0.6);
+    const dir = Math.sign(touchY - e.touches[0].clientY);
+    if (dir && inVoyage(dir) && !(dir > 0 && world.target() === n - 1 && !world.isFlying())) e.preventDefault();
   }, { passive: false });
-  addEventListener('touchend', () => {
-    if (touchY === null || !dragging) { touchY = null; return; }
-    const moved = scrollY - touchFrom;
+  addEventListener('touchend', (e) => {
+    if (touchY === null) return;
+    const dy = touchY - e.changedTouches[0].clientY;
     touchY = null;
-    pos = scrollY; vel = 0;
-    const here = chapterAt(touchFrom);
-    if (Math.abs(moved) < 30 && Math.abs(touchV) < 350) { sailTo(here); return; }   // springs back
-    const dir = Math.sign(moved || touchV);
-    sailTo(here + dir);
+    if (Math.abs(dy) < 36) return;
+    const dir = Math.sign(dy);
+    if (inVoyage(dir)) page(dir);
   });
+
+  // a scrollbar drag (or any scroll the page did not make) settles on the nearest island
+  let settleTimer = 0;
+  addEventListener('scroll', () => {
+    if (quietScroll) { quietScroll = false; return; }
+    if (playing || scrollY > maxScroll() + 2) return;
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      const c = chapterAt(scrollY);
+      if (c !== world.target() && world.flyTo(c, elapsed)) document.body.classList.add('sailing');
+    }, 180);
+  }, { passive: true });
 
   addEventListener('keydown', (e) => {
     if (playing || (e.target.closest && e.target.closest('input, textarea, video, summary'))) return;
@@ -438,7 +375,7 @@ async function boot() {
   document.querySelectorAll('.home').forEach((el) => el.addEventListener('click', (e) => {
     e.preventDefault();
     if (playing) exitPlay();
-    sailTo(0);   // from far away this is one straight flight home
+    goTo(0);   // one flight home, straight there
   }));
   $('playBtn').addEventListener('click', enterPlay);
   const sail = $('sailBtn');
@@ -538,10 +475,10 @@ async function boot() {
       // painting-sized now, several times the old arena
       world.focusIsland(combatSpec, 0.24);
     } else {
-      const r = world.routeAt(progress);
-      world.setCamera(progress, elapsed);
+      const r = world.setCamera(progress, elapsed);
       const spec = ISLANDS[r.station];
       const settled = !r.moving;
+      if (settled && document.body.classList.contains('sailing')) document.body.classList.remove('sailing');
 
       // the panel belongs to the island the camera is holding on
       const wantId = settled ? spec.id : null;
@@ -557,8 +494,6 @@ async function boot() {
         // the sea chart keeps to the side the chapter text leaves free
         const shown = panels.find((p) => p.dataset.island === wantId);
         if (shown) document.body.classList.toggle('text-right', shown.classList.contains('right'));
-        // and the island steps aside to the side the text leaves free
-        if (shown) world.setTextSide(shown.classList.contains('right') ? -1 : 1);
         shownIsland = wantId;
       }
       // the island's name, drawn in real type and pinned to the water; on a tall
@@ -575,10 +510,10 @@ async function boot() {
         el.style.transform = `translate(-50%,-50%) translate(${p.x.toFixed(1)}px,${Math.min(p.y, ceiling).toFixed(1)}px)`;
         el.style.opacity = String(near);
       }
-      if (spec.storm) state.storm = settled ? Math.min(1, r.local * 1.6) : 0.2;
+      if (spec.storm) state.storm = settled ? Math.min(1, r.holdFor * 0.6) : 0.2;
 
       const chart = $('chartSvg');
-      if (chart.__place) chart.__place(r.u * (ISLANDS.length - 1), r.station);
+      if (chart.__place) chart.__place(Math.min(r.u, ISLANDS.length - 1.0001), r.station);
     }
 
     world.tick(dt, elapsed, state);
@@ -593,12 +528,20 @@ async function boot() {
   /* a console handle, and a way to grab frames without relying on the page being painted */
   window.__ss = {
     world, fight, ISLANDS,
+    // numbers for every camera flight: await __ss.checkFlights() (see flightcheck.js)
+    async checkFlights() { const m = await import('./flightcheck.js'); return m.checkFlights(world); },
     get progress() { return progress; },
     step(seconds = 1 / 60, times = 1) {
       for (let k = 0; k < times; k++) { elapsed += seconds; world.tick(seconds, elapsed, { storm: 1 }); fight.update(seconds, elapsed); }
     },
     async shot(name, p, opts = {}) {
-      if (p !== undefined) { progress = p; world.setCamera(p, elapsed); }
+      // p: a place on the track; the camera is put straight on the island nearest to it
+      if (p !== undefined) {
+        progress = p;
+        world.voyage.flight = null;
+        world.voyage.station = chapterAt(p * maxScroll());
+        world.setCamera(p, elapsed);
+      }
       if (opts.island !== undefined) world.focusIsland(ISLANDS[opts.island], opts.zoom || 1);
       world.labels.forEach((l) => { l.mesh.material.opacity = 1; });
       world.tick(0.016, elapsed, { storm: opts.storm ?? 1 });

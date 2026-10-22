@@ -39,6 +39,35 @@ SKILLS = {
     "Zone Walker": "ZoneWalker", "Swift Feet": "Swift", "Bloodthirst": "Bloodthirst",
     "Vitality": "Vitality", "Carapace": "Block", "Lightning": "Lightning",
 }
+# what each skill does at its first level, in short English (docs/game-design.md, the skills table)
+SKILL_DESC = {
+    "Multishot": "+1 projectile alongside your shot",
+    "Rapid Fire": "+30% attack speed",
+    "Piercing": "shots pierce 2 more targets",
+    "Power": "+35% damage",
+    "Vampirism": "heal 15% of the damage you deal",
+    "Rear Shot": "an extra shot behind you",
+    "Poison": "poisons enemies for 6 s",
+    "Ricochet": "shots bounce on to another enemy",
+    "Blaze": "sets enemies on fire for 3 s",
+    "Freeze": "slows enemies by 35% for 2 s",
+    "Crit Master": "+15% crit chance, +25% crit damage",
+    "Orbit": "two satellites circle you",
+    "Long Shot": "+20% attack range",
+    "Big Shots": "+25% projectile size",
+    "Splinter": "pierces and bounces throw off extra shards",
+    "Diagonal Shots": "two extra diagonal shots at half damage",
+    "Seeker": "shots seek out enemies",
+    "Executioner": "+50% damage to foes below 30% health",
+    "Rage": "+40% damage below 35% health",
+    "Run and Gun": "shoot on the move at 50% damage",
+    "Zone Walker": "-40% damage from the storm",
+    "Swift Feet": "+15% move speed",
+    "Bloodthirst": "+10 health for every rival you kill",
+    "Vitality": "+30% max health",
+    "Carapace": "+20 max armor",
+    "Lightning": "15% chance to shock on hit",
+}
 # the twists, in short English (the GDD's Russian lines, said for a player)
 TWISTS = {
     "Bullet Storm": "every fifth volley fires twice",
@@ -162,7 +191,7 @@ def main():
     skills = []
     for name, k in SKILLS.items():
         tile(skill_icon_map.GLYPHS[k], skill_icon_map.COLORS[k], OUT / f"s_{k}.webp")
-        skills.append({"id": "s_" + k, "name": name})
+        skills.append({"id": "s_" + k, "name": name, "desc": SKILL_DESC[name]})
     nodes = []
     for t in titles:
         k = key(t["name"])

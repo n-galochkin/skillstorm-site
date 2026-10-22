@@ -4,107 +4,133 @@ export const COMBOS = {
  "skills": [
   {
    "id": "s_Multishot",
-   "name": "Multishot"
+   "name": "Multishot",
+   "desc": "+1 projectile alongside your shot"
   },
   {
    "id": "s_RapidFire",
-   "name": "Rapid Fire"
+   "name": "Rapid Fire",
+   "desc": "+30% attack speed"
   },
   {
    "id": "s_Pierce",
-   "name": "Piercing"
+   "name": "Piercing",
+   "desc": "shots pierce 2 more targets"
   },
   {
    "id": "s_Power",
-   "name": "Power"
+   "name": "Power",
+   "desc": "+35% damage"
   },
   {
    "id": "s_Vampirism",
-   "name": "Vampirism"
+   "name": "Vampirism",
+   "desc": "heal 15% of the damage you deal"
   },
   {
    "id": "s_RearShot",
-   "name": "Rear Shot"
+   "name": "Rear Shot",
+   "desc": "an extra shot behind you"
   },
   {
    "id": "s_Poison",
-   "name": "Poison"
+   "name": "Poison",
+   "desc": "poisons enemies for 6 s"
   },
   {
    "id": "s_Ricochet",
-   "name": "Ricochet"
+   "name": "Ricochet",
+   "desc": "shots bounce on to another enemy"
   },
   {
    "id": "s_Blaze",
-   "name": "Blaze"
+   "name": "Blaze",
+   "desc": "sets enemies on fire for 3 s"
   },
   {
    "id": "s_Freeze",
-   "name": "Freeze"
+   "name": "Freeze",
+   "desc": "slows enemies by 35% for 2 s"
   },
   {
    "id": "s_CritMaster",
-   "name": "Crit Master"
+   "name": "Crit Master",
+   "desc": "+15% crit chance, +25% crit damage"
   },
   {
    "id": "s_Orbit",
-   "name": "Orbit"
+   "name": "Orbit",
+   "desc": "two satellites circle you"
   },
   {
    "id": "s_LongShot",
-   "name": "Long Shot"
+   "name": "Long Shot",
+   "desc": "+20% attack range"
   },
   {
    "id": "s_BigShots",
-   "name": "Big Shots"
+   "name": "Big Shots",
+   "desc": "+25% projectile size"
   },
   {
    "id": "s_Split",
-   "name": "Splinter"
+   "name": "Splinter",
+   "desc": "pierces and bounces throw off extra shards"
   },
   {
    "id": "s_Diagonal",
-   "name": "Diagonal Shots"
+   "name": "Diagonal Shots",
+   "desc": "two extra diagonal shots at half damage"
   },
   {
    "id": "s_Homing",
-   "name": "Seeker"
+   "name": "Seeker",
+   "desc": "shots seek out enemies"
   },
   {
    "id": "s_Executioner",
-   "name": "Executioner"
+   "name": "Executioner",
+   "desc": "+50% damage to foes below 30% health"
   },
   {
    "id": "s_Rage",
-   "name": "Rage"
+   "name": "Rage",
+   "desc": "+40% damage below 35% health"
   },
   {
    "id": "s_RunAndGun",
-   "name": "Run and Gun"
+   "name": "Run and Gun",
+   "desc": "shoot on the move at 50% damage"
   },
   {
    "id": "s_ZoneWalker",
-   "name": "Zone Walker"
+   "name": "Zone Walker",
+   "desc": "-40% damage from the storm"
   },
   {
    "id": "s_Swift",
-   "name": "Swift Feet"
+   "name": "Swift Feet",
+   "desc": "+15% move speed"
   },
   {
    "id": "s_Bloodthirst",
-   "name": "Bloodthirst"
+   "name": "Bloodthirst",
+   "desc": "+10 health for every rival you kill"
   },
   {
    "id": "s_Vitality",
-   "name": "Vitality"
+   "name": "Vitality",
+   "desc": "+30% max health"
   },
   {
    "id": "s_Block",
-   "name": "Carapace"
+   "name": "Carapace",
+   "desc": "+20 max armor"
   },
   {
    "id": "s_Lightning",
-   "name": "Lightning"
+   "name": "Lightning",
+   "desc": "15% chance to shock on hit"
   }
  ],
  "titles": [

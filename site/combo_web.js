@@ -51,7 +51,7 @@ export function buildWeb(host) {
   const nS = COMBOS.ring.length;
   COMBOS.ring.forEach((id, i) => {
     const s = COMBOS.skills.find((k) => k.id === id);
-    nodes.set(id, { id, name: s.name, kind: 's', angle: wrap(-90 + (i * 360) / nS) });
+    nodes.set(id, { id, name: s.name, desc: s.desc, kind: 's', angle: wrap(-90 + (i * 360) / nS) });
   });
   for (const tier of [2, 3]) {
     const row = COMBOS.titles.filter((t) => t.tier === tier).map((t) => ({
@@ -112,11 +112,8 @@ export function buildWeb(host) {
   };
   function show(id) {
     const n = nodes.get(id);
-    let lit;
-    if (n.kind === 's') {
-      lit = new Set([id]);
-      for (const t of nodes.values()) if (t.req && t.req.includes(id)) lit.add(t.id);
-    } else lit = recipe(id);
+    // a skill is described, not traced: only titles light up their recipes
+    const lit = n.kind === 's' ? new Set([id]) : recipe(id);
     svg.classList.add('focus');
     nodeEl.forEach((g, k) => g.classList.toggle('on', lit.has(k)));
     nodeEl.forEach((g, k) => g.classList.toggle('lead', k === id));
@@ -125,12 +122,13 @@ export function buildWeb(host) {
       p.classList.toggle('on', on);
       if (on) { p.classList.remove('flow'); void p.getBBox(); p.classList.add('flow'); } else p.classList.remove('flow');
     });
+    // the caption: the node's own icon on the left, its name and what it does beside it
+    const icon = `<img class="ico" src="assets/icons/${id}.webp" alt="">`;
     if (n.kind === 's') {
-      const uses = [...lit].filter((k) => k !== id).map((k) => nodes.get(k).name);
-      cap.innerHTML = `<b class="ks">${n.name}</b><span>goes into ${uses.join(', ')}</span>`;
+      cap.innerHTML = `${icon}<div><b class="ks">${n.name}</b><span class="tw">${n.desc}</span></div>`;
     } else {
       const parts = n.req.map((r) => `<i><img src="assets/icons/${r}.webp" alt="">${nodes.get(r).name}</i>`).join('<em>+</em>');
-      cap.innerHTML = `<b class="k${n.kind}">${n.name}</b><span class="rec">${parts}</span><span class="tw">${n.twist}</span>`;
+      cap.innerHTML = `${icon}<div><b class="k${n.kind}">${n.name}</b><span class="rec">${parts}</span><span class="tw">${n.twist}</span></div>`;
     }
   }
 

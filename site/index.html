@@ -610,7 +610,9 @@ html.sword-cursor, html.sword-cursor *{cursor:none!important}
 .web .node.lead image{transform:scale(1.22)}
 .web .node.lead .halo{fill:rgba(242,197,92,.45)}
 .web .node.k3.lead .halo{fill:rgba(232,90,80,.55)}
-.web-cap{min-height:58px; margin-top:6px; display:flex; flex-direction:column; gap:4px}
+.web-cap{min-height:58px; margin-top:6px; display:flex; align-items:flex-start; gap:12px}
+.web-cap > div{display:flex; flex-direction:column; gap:4px; min-width:0}
+.web-cap .ico{width:46px; height:46px; flex:none; filter:drop-shadow(0 3px 5px rgba(0,0,0,.45))}
 .web-cap b{font-family:var(--ui); font-weight:900; font-size:14px; letter-spacing:.12em; text-transform:uppercase}
 .web-cap b.k2{color:var(--gold)} .web-cap b.k3{color:#ff8a7a} .web-cap b.ks{color:var(--ink)}
 .web-cap .rec{display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; font-family:var(--ui); font-weight:700; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--mist)}
@@ -638,7 +640,8 @@ html.sword-cursor, html.sword-cursor *{cursor:none!important}
   .panel.hero p{font-size:14px}
   .panel[data-island="skills"] > p:not(.where){display:none}
   .panel[data-island="skills"] .web{max-width:236px; justify-self:center}
-  .web-cap .tw{display:none}
+  .web-cap .rec + .tw{display:none}
+  .web-cap .ico{width:36px; height:36px}
   .web-cap{min-height:34px}
 }
 /* while the page sails to the next island the chapter's text is already gone */
@@ -660,7 +663,7 @@ body.sailing .panel{opacity:0 !important; pointer-events:none; transition:opacit
     <p>Skillstorm is in development. Follow the devlog to hear first about the Steam page and the demo.</p>
     <div class="act">
       <a class="plate" href="https://www.youtube.com/@NikitaGalochkin" target="_blank" rel="noopener">YouTube</a>
-      <a class="ghost" href="https://www.tiktok.com/@solodevich" target="_blank" rel="noopener">TikTok</a>
+      <a class="ghost" href="https://www.tiktok.com/@your_sillity" target="_blank" rel="noopener">TikTok</a>
       <a class="ghost" href="https://www.instagram.com/your_sillity/" target="_blank" rel="noopener">Instagram</a>
     </div>
   </div>
@@ -685,7 +688,7 @@ body.sailing .panel{opacity:0 !important; pointer-events:none; transition:opacit
     <a class="home" href="./" aria-label="Skillstorm, back to the start"><img src="assets/logo.webp" alt="Skillstorm" width="900" height="233"></a>
     <nav>
       <a href="https://www.youtube.com/@NikitaGalochkin" target="_blank" rel="noopener">YouTube</a>
-      <a href="https://www.tiktok.com/@solodevich" target="_blank" rel="noopener">TikTok</a>
+      <a href="https://www.tiktok.com/@your_sillity" target="_blank" rel="noopener">TikTok</a>
       <a href="https://www.instagram.com/your_sillity/" target="_blank" rel="noopener">Instagram</a>
     </nav>
     <p class="contact">Press and business: <a href="mailto:work.n.galochkin@gmail.com">work.n.galochkin@gmail.com</a></p>
@@ -772,7 +775,7 @@ body.sailing .panel{opacity:0 !important; pointer-events:none; transition:opacit
     </div>
     <div class="links">
       <a href="https://www.youtube.com/@NikitaGalochkin" target="_blank" rel="noopener"><b>YouTube</b><span>@NikitaGalochkin</span></a>
-      <a href="https://www.tiktok.com/@solodevich" target="_blank" rel="noopener"><b>TikTok</b><span>@solodevich</span></a>
+      <a href="https://www.tiktok.com/@your_sillity" target="_blank" rel="noopener"><b>TikTok</b><span>@your_sillity</span></a>
       <a href="https://www.instagram.com/your_sillity/" target="_blank" rel="noopener"><b>Instagram</b><span>@your_sillity</span></a>
     </div>
   </article>
