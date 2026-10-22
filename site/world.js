@@ -32,13 +32,11 @@ export const LIGHT = (() => {
 })();
 
 // the scroll track: a short hold at each island, a long stretch between them
-// how far the head may look aside from the course (and the course start or end off the straight
-// way), and the longest a flight may take (seconds)
-const SIDE = THREE.MathUtils.degToRad(45);
-// how far it may look aside from the course to keep an island in the frame (a bird watching an
-// island over its wing as it swings round it)
-const LOOK_ASIDE = THREE.MathUtils.degToRad(80);
+// the longest a flight may take (seconds)
 const MAX_FLIGHT = 4;
+// the gaze is free, but stays within this much of the way it flies, either side (Nikita 2026-10-22:
+// "угол зрения всё ещё впереди по направлению полёта, примерно 120-160 градусов")
+const CONE = THREE.MathUtils.degToRad(70);
 export const HOLD = 0.2, TRAVEL = 1.45;
 
 /* --------------------------------------------------------------- textures */
@@ -610,40 +608,55 @@ export class World {
   target() { return this.voyage.flight ? this.voyage.flight.to : this.voyage.station; }
   isFlying() { return !!this.voyage.flight; }
 
-  /* A bird's path from a pose (position, horizontal heading) to an island's hold: one smooth swoop
-     (a Hermite curve). It sets off along the way it faces - or up to SIDE off it, toward the goal -
-     and comes in facing the island - or up to SIDE off, from the way it came. So a near island is
-     flown to almost straight; one behind is reached by a short swing round at the slow start of the
-     flight, never by a loop or a stop. Over the plan goes a height profile: a dive low over the water
-     for a near island, a climb over the archipelago for a far one, and never less than 40 m over any
-     island it crosses. */
-  birdPath(P0, H0, to) {
+  /* The bird's path to an island's hold, apart from where it looks (Nikita 2026-10-22: "отделить
+     полёт и взгляд камеры: птица может лететь и разворачиваться, при этом смотреть в разные
+     стороны"). From a hover it sets off straight for the goal along a gentle arc; on the wing it
+     carries on the way it was going and bends round to the goal, so a change of mind never kinks.
+     Over the plan goes a height profile: a dive low over the water for a near island, a climb over
+     the archipelago for a far one, and never less than 40 m over any island it crosses. */
+  birdPath(P0, H0, v0, to) {
     const B = this.stationFor(ISLANDS[to]);
-    const flat = (x, z) => new THREE.Vector3(x, 0, z).normalize();
-    const toB = flat(B.x - P0.x, B.z - P0.z);
-    const FB = flat(ISLANDS[to].pos[0] - B.x, ISLANDS[to].pos[1] - B.z);   // facing at the hold
-    // a direction turned toward another by at most SIDE
-    const toward = (v, goal) => {
-      const a = Math.atan2(v.z, v.x);
-      let d = Math.atan2(goal.z, goal.x) - a;
-      d = Math.atan2(Math.sin(d), Math.cos(d));
-      const r = a + THREE.MathUtils.clamp(d, -SIDE, SIDE);
-      return new THREE.Vector3(Math.cos(r), 0, Math.sin(r));
-    };
-    const t0 = toward(H0, toB), t1 = toward(FB, toB);
     const d = Math.hypot(B.x - P0.x, B.z - P0.z);
-    // the swing at each end: wide when it already points the right way, tight when it must come round
-    const k = this.tanK ?? 0.75;
-    const a0 = d * k * (0.4 + 0.6 * Math.max(0, t0.dot(toB)));
-    const a1 = d * k * (0.4 + 0.6 * Math.max(0, t1.dot(toB)));
+    const toB = new THREE.Vector3(B.x - P0.x, 0, B.z - P0.z).normalize();
+    const FB = new THREE.Vector3(ISLANDS[to].pos[0] - B.x, 0, ISLANDS[to].pos[1] - B.z).normalize();
+    // a gentle arc, bowed toward the side it looks at as it sets off (so it turns its head less)
+    const bow = THREE.MathUtils.degToRad(14) * (Math.sign(H0.x * toB.z - H0.z * toB.x) || 1);
+    const turn = (v, a) => new THREE.Vector3(v.x * Math.cos(a) - v.z * Math.sin(a), 0, v.x * Math.sin(a) + v.z * Math.cos(a));
+    // it sets off within CONE of where it looks, and comes in within CONE of facing the island, so the
+    // gaze at either end lies inside its field of view; a goal further round is reached by a swing.
+    // When the goal lies beyond CONE it may swing either way: of the ways round, the one that turns
+    // least (an S, not a full circle) and is shortest wins
+    const flying = v0 > 5;
+    const within = (v, goal) => v.dot(goal) >= Math.cos(CONE);
+    const starts = flying ? [H0.clone()] : within(H0, toB) ? [turn(toB, bow)] : [turn(H0, CONE), turn(H0, -CONE)];
+    const ends = within(FB, toB) ? [turn(toB, -bow)] : [turn(FB, CONE), turn(FB, -CONE)];
+    const a0 = flying ? THREE.MathUtils.clamp(v0 * 1.2, d * 0.3, d * 1.2) : d * 0.8;
+    const a1 = d * 0.8;
     const n = Math.max(12, Math.ceil(d / 18));
+    const plan = (t0, t1) => {
+      const q = [];
+      for (let i = 0; i <= n; i++) {
+        const u = i / n, u2 = u * u, u3 = u2 * u;
+        const h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u, h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
+        q.push([h00 * P0.x + h10 * t0.x * a0 + h01 * B.x + h11 * t1.x * a1, h00 * P0.z + h10 * t0.z * a0 + h01 * B.z + h11 * t1.z * a1]);
+      }
+      let len = 0, turned = 0;
+      for (let i = 1; i < q.length; i++) {
+        len += Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]);
+        if (i > 1) {
+          let a = Math.atan2(q[i][1] - q[i - 1][1], q[i][0] - q[i - 1][0]) - Math.atan2(q[i - 1][1] - q[i - 2][1], q[i - 1][0] - q[i - 2][0]);
+          turned += Math.abs(Math.atan2(Math.sin(a), Math.cos(a)));
+        }
+      }
+      return { q, cost: len + 120 * turned };
+    };
+    let best = null;
+    for (const t0 of starts) for (const t1 of ends) { const pl = plan(t0, t1); if (!best || pl.cost < best.cost) best = pl; }
     const far = d > 650;      // a far island: over the archipelago, not round it
     const pts = [];
     for (let i = 0; i <= n; i++) {
-      const u = i / n, u2 = u * u, u3 = u2 * u;
-      const h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u, h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
-      const x = h00 * P0.x + h10 * t0.x * a0 + h01 * B.x + h11 * t1.x * a1;
-      const z = h00 * P0.z + h10 * t0.z * a0 + h01 * B.z + h11 * t1.z * a1;
+      const u = i / n;
+      const [x, z] = best.q[i];
       const base = THREE.MathUtils.lerp(P0.y, B.y, u);
       const bump = Math.pow(Math.sin(Math.PI * u), 0.9);
       // near: dip toward the water; far: rise over the islands
@@ -654,8 +667,8 @@ export class World {
     return new THREE.CatmullRomCurve3(pts, false, 'centripetal');
   }
 
-  /* Fly to an island from wherever the camera is, the way it faces. Mid-flight this starts a new
-     path from the current point and heading, so a change of mind is a turn, not a jump. */
+  /* Fly to an island from wherever the camera is. Mid-flight this starts a new path from the current
+     point, carrying on the way it was going, so a change of mind is a turn, not a jump. */
   flyTo(index, elapsed) {
     const v = this.voyage;
     if (!v.flight && index === v.station) return 0;
@@ -666,7 +679,7 @@ export class World {
     if (heading.lengthSq() < 1e-6) heading.set(0, 0, -1);
     heading.normalize();
     const v0 = v.flight ? v.flight.speed || 0 : 0;
-    const curve = this.birdPath(from, heading, index);
+    const curve = this.birdPath(from, heading, v0, index);
     const { times } = this.speedPlan(curve, v0);
     // no flight longer than MAX_FLIGHT (Nikita 2026-10-22: "не больше 4 секунд"): a long one is
     // flown faster throughout
@@ -676,7 +689,10 @@ export class World {
       // the chart's ship sets off from where it is now, not from where the first flight began
       to: index, from: v.flight ? this.voyageState(elapsed).u : v.station, curve, times, t0: elapsed,
       seconds: times[times.length - 1], moving: !!v.flight, lookFrom: lookNow, sideFrom: this.side || 0,
-      heading, speed: v0, fromIsle: v.flight ? -1 : v.station,
+      heading, speed: v0,
+      // the view it holds as it sets off (from where it is to where it looks) and the one it lands on
+      offFrom: new THREE.Vector3(lookNow.x - from.x, 0, lookNow.z - from.z),
+      offTo: (() => { const B = this.stationFor(ISLANDS[index]); return new THREE.Vector3(ISLANDS[index].pos[0] - B.x, 0, ISLANDS[index].pos[1] - B.z); })(),
     };
     return v.flight.seconds;
   }
@@ -758,34 +774,36 @@ export class World {
     const ahead = c.getPointAt(Math.min(1, s + 0.02)), behind = c.getPointAt(Math.max(0, s - 0.02));
     const flat = new THREE.Vector3(ahead.x - behind.x, 0, ahead.z - behind.z);
     if (flat.lengthSq() > 1e-6) f.heading = flat.clone().normalize();
-    // it looks where it flies, but keeps an island in the frame: the head turns aside from the
-    // course - softly, at most SIDE - toward the island that matters most just now (the one it flies
-    // to, else the nearest, the one most nearly ahead). The weights change smoothly, so the gaze
-    // never jumps from one island to another (Nikita 2026-10-22: "чтобы в видимой части оставался
-    // остров, можно чуть боком лететь").
-    const hy = Math.atan2(f.heading.z, f.heading.x);
-    let fx = 0, fz = 0, fd = 0, fw = 0;
-    ISLANDS.forEach((isle, i) => {
+    // where it looks is its own, apart from the course. Underneath, the view slides from the one it
+    // held over the island it leaves to the one it will hold over the island it flies to - the
+    // camera carries that view across the map, so it never swings round to look at the sea and
+    // back (a look from the volcano to the Skills went round a full circle). An island it comes
+    // near pulls the gaze a little, if it lies roughly the way the view already faces.
+    const offset = f.offFrom.clone().lerp(f.offTo, ease(s));
+    const base = new THREE.Vector3(pos.x + offset.x, 0, pos.z + offset.z);
+    const baseDir = offset.clone().normalize();
+    let gx = base.x, gz = base.z, gw = 1;
+    ISLANDS.forEach((isle) => {
       const dx = isle.pos[0] - pos.x, dz = isle.pos[1] - pos.z;
       const dist = Math.hypot(dx, dz);
-      let off = Math.atan2(dz, dx) - hy;
-      off = Math.atan2(Math.sin(off), Math.cos(off));
-      // the island it leaves and the one it flies to stay in view even when they lie well to the side
-      // (swinging round one, it watches it over its wing); others only when they are ahead
-      const ends = i === f.to ? 3 * (0.4 + 0.6 * s) : i === f.fromIsle ? 3 * (1 - s) ** 2 : 0;
-      const wgt = ends > 0
-        ? (Math.cos(off) + 1) ** 2 * ends / (1 + Math.max(0, dist - isle.radius) / 400)
-        : Math.max(0, Math.cos(off)) ** 3 / (1 + Math.max(0, dist - isle.radius) / 250);
-      fx += Math.cos(off) * wgt; fz += Math.sin(off) * wgt; fd += dist * wgt; fw += wgt;
+      const facing = (dx * baseDir.x + dz * baseDir.z) / Math.max(1, dist);
+      const wgt = 1.5 * Math.exp(-((Math.max(0, dist - isle.radius) / 260) ** 2)) * Math.max(0, facing) ** 2;
+      gx += isle.pos[0] * wgt; gz += isle.pos[1] * wgt; gw += wgt;
     });
-    const aside = fw > 1e-9 ? LOOK_ASIDE * Math.tanh(Math.atan2(fz, fx) / LOOK_ASIDE) : 0;
-    // never so near that it stares straight down from a height (the volcano's hold is 280 m up)
-    const reach = THREE.MathUtils.clamp(fw > 1e-9 ? fd / fw : 320, Math.max(160, pos.y * 1.3), 460);
-    const gaze = new THREE.Vector3(pos.x + Math.cos(hy + aside) * reach, 0, pos.z + Math.sin(hy + aside) * reach);
+    // and it stays within CONE of the way it flies: softly, it eases toward the edge, never hits it
+    let gaze = new THREE.Vector3(gx / gw, 0, gz / gw);
+    {
+      const hy = Math.atan2(f.heading.z, f.heading.x);
+      const gd = Math.hypot(gaze.x - pos.x, gaze.z - pos.z);
+      let off = Math.atan2(gaze.z - pos.z, gaze.x - pos.x) - hy;
+      off = Math.atan2(Math.sin(off), Math.cos(off));
+      const yaw = hy + CONE * Math.tanh(off / CONE);
+      gaze = new THREE.Vector3(pos.x + Math.cos(yaw) * gd, 0, pos.z + Math.sin(yaw) * gd);
+    }
     const island = new THREE.Vector3(ISLANDS[f.to].pos[0], 0, ISLANDS[f.to].pos[1]);
-    // from where it looked as it hovered, and onto the island as it lands
-    const look = f.lookFrom.clone().lerp(gaze, ease(te / 0.6))
-      .lerp(island, THREE.MathUtils.smoothstep(s, 0.85, 1));
+    // from where it looked as it hovered, and exactly onto the island as it lands
+    const look = f.lookFrom.clone().lerp(gaze, ease(te / 0.5))
+      .lerp(island, THREE.MathUtils.smoothstep(s, 0.8, 1));
     const a0 = Math.atan2(pos.z - behind.z, pos.x - behind.x), a1 = Math.atan2(ahead.z - pos.z, ahead.x - pos.x);
     let turn = a1 - a0;
     while (turn > Math.PI) turn -= 2 * Math.PI;
