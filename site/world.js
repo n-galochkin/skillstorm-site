@@ -653,7 +653,8 @@ export class World {
     const v0 = v.flight ? v.flight.speed || 0 : 0;
     const { times, seconds } = this.speedPlan(curve, v0);
     v.flight = {
-      to: index, from: v.flight ? v.flight.from : v.station, curve, seconds, times, t0: elapsed,
+      // the chart's ship sets off from where it is now, not from where the first flight began
+      to: index, from: v.flight ? this.voyageState(elapsed).u : v.station, curve, seconds, times, t0: elapsed,
       moving: !!v.flight, lookFrom: lookNow, sideFrom: this.side || 0, heading, speed: v0,
     };
     return seconds;
@@ -727,6 +728,7 @@ export class World {
     while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (T[mid] <= te) lo = mid; else hi = mid; }
     const frac = THREE.MathUtils.clamp((te - T[lo]) / Math.max(1e-6, T[hi] - T[lo]), 0, 1);
     const s = (lo + frac) / N;
+    f.s = s;
     f.speed = f.curve.getLength() / N / Math.max(1e-6, T[hi] - T[lo]);
     const c = f.curve;
     const pos = c.getPointAt(s);
@@ -772,8 +774,7 @@ export class World {
     const v = this.voyage;
     if (!v.flight) return { station: v.station, moving: false, u: v.station, holdFor: elapsed - v.arrivedAt };
     const f = v.flight;
-    const k = THREE.MathUtils.clamp((elapsed - f.t0) / f.seconds, 0, 1);
-    return { station: f.to, moving: true, u: THREE.MathUtils.lerp(f.from, f.to, k), holdFor: 0 };
+    return { station: f.to, moving: true, u: THREE.MathUtils.lerp(f.from, f.to, f.s || 0), holdFor: 0 };
   }
 
   setCamera(p, elapsed) {
