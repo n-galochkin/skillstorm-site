@@ -659,17 +659,21 @@ export class World {
     return seconds;
   }
 
-  /* How fast to fly each stretch of a path: as fast as cruising allows on the straight, slower in
-     the turns (the course never swings faster than 100 degrees a second, so the head keeps up with
-     it and the camera never looks sideways or back), speeding up and slowing down gently at the
-     ends. Returns the time at each of the path's evenly spaced points. */
+  /* How fast to fly each stretch of a path, the way a bird spends height: it gathers speed as it
+     dives, slows as it climbs back up to the island, and is never held to one cruising speed.
+     It slows in the turns too (the course never swings faster than 120 degrees a second, so the
+     head keeps up with it and the camera never looks sideways or back), and speeds up and slows
+     down gently at the ends. Returns the time at each of the path's evenly spaced points. */
   speedPlan(curve, v0 = 0) {
     const L = curve.getLength();
     const N = Math.max(8, Math.ceil(L / 5));
     const ds = L / N;
     const P = curve.getSpacedPoints(N);
-    const vMax = 300, accel = 110, omega = THREE.MathUtils.degToRad(this.turnRate || 100);
-    const cap = new Float64Array(N + 1).fill(vMax);
+    const vLevel = 280, accel = 130, gravity = 230, omega = THREE.MathUtils.degToRad(this.turnRate || 120);
+    // height turned into speed: every metre below the higher end of the flight is worth some
+    const yTop = Math.max(P[0].y, P[N].y);
+    const cap = new Float64Array(N + 1);
+    for (let i = 0; i <= N; i++) cap[i] = Math.min(420, Math.sqrt(vLevel ** 2 + 2 * gravity * Math.max(0, yTop - P[i].y)));
     for (let i = 1; i < N; i++) {
       const a0 = Math.atan2(P[i].z - P[i - 1].z, P[i].x - P[i - 1].x);
       const a1 = Math.atan2(P[i + 1].z - P[i].z, P[i + 1].x - P[i].x);
@@ -677,15 +681,23 @@ export class World {
       while (d > Math.PI) d -= 2 * Math.PI;
       while (d < -Math.PI) d += 2 * Math.PI;
       const kappa = Math.abs(d) / ds;
-      if (kappa > 1e-6) cap[i] = Math.min(vMax, omega / kappa);
+      if (kappa > 1e-6) cap[i] = Math.min(cap[i], omega / kappa);
     }
     // a turn is felt a little before and after it: each cap spreads over its neighbours
     const spread = Float64Array.from(cap);
     for (let i = 0; i <= N; i++) for (let j = Math.max(0, i - 4); j <= Math.min(N, i + 4); j++) spread[i] = Math.min(spread[i], cap[j]);
     const vel = Float64Array.from(spread);
     vel[0] = Math.min(v0, spread[0]); vel[N] = 0;
-    for (let i = 1; i <= N; i++) vel[i] = Math.min(vel[i], Math.sqrt(vel[i - 1] ** 2 + 2 * accel * ds));
-    for (let i = N - 1; i >= 0; i--) vel[i] = Math.min(vel[i], Math.sqrt(vel[i + 1] ** 2 + 2 * accel * ds));
+    // a dive adds to the push, a climb takes from it; braking, a climb helps and a dive works against
+    const fall = (i) => (P[i - 1].y - P[i].y) / ds;            // + going down
+    for (let i = 1; i <= N; i++) {
+      const a = Math.max(25, accel + gravity * fall(i));
+      vel[i] = Math.min(vel[i], Math.sqrt(vel[i - 1] ** 2 + 2 * a * ds));
+    }
+    for (let i = N - 1; i >= 0; i--) {
+      const b = Math.max(40, accel - gravity * fall(i + 1));
+      vel[i] = Math.min(vel[i], Math.sqrt(vel[i + 1] ** 2 + 2 * b * ds));
+    }
     // rounded off, so the speed eases rather than kinks (smoothing never raises it over a cap)
     for (let pass = 0; pass < 4; pass++) {
       const prev = Float64Array.from(vel);
@@ -698,6 +710,9 @@ export class World {
     const times = new Float64Array(N + 1);
     // the last metres at a crawl would take seconds; the trailing camera rounds off the stop instead
     for (let i = 1; i <= N; i++) times[i] = times[i - 1] + 2 * ds / Math.max(36, vel[i - 1] + vel[i]);
+    // a hop to the next-door island still takes a breath: no flight shorter than 2.4 s
+    const stretch = Math.max(1, 2.4 / times[N]);
+    for (let i = 0; i <= N; i++) { times[i] *= stretch; vel[i] /= stretch; }
     return { times, seconds: times[N], speeds: vel };
   }
 
@@ -790,13 +805,13 @@ export class World {
       }
       const k = 1 - Math.exp(-5 * dt);
       this.camPos.lerp(pos, k);
-      // the gaze turns at most 110 degrees a second, whatever the path does: a bird's head never snaps
+      // the gaze turns at most 130 degrees a second, whatever the path does: a bird's head never snaps
       const want = look.clone().sub(this.camPos);
       const have = this.camLook.clone().sub(this.camPos);
       const reach = THREE.MathUtils.lerp(have.length(), want.length(), k);
       const wantDir = want.normalize(), haveDir = have.normalize();
       const angle = haveDir.angleTo(wantDir);
-      const step = Math.min(angle * k * 1.6, THREE.MathUtils.degToRad(110) * dt);
+      const step = Math.min(angle * k * 1.6, THREE.MathUtils.degToRad(130) * dt);
       const dirNow = angle > 1e-5
         ? haveDir.clone().applyQuaternion(new THREE.Quaternion().setFromUnitVectors(haveDir, wantDir).slerp(new THREE.Quaternion(), 1 - step / angle))
         : wantDir;
