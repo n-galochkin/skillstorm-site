@@ -602,43 +602,41 @@ export class World {
     return top;
   }
 
-  /* One leg as a bird would fly it: off the hold with a gliding drop, low over the water off
-     to one side, in at the next island from its flank, round it, and down onto the hold. */
+  /* One leg, both ways. Forward: off the hold with a gliding drop, a dive low over the water
+     off to one side, a climb toward the next island and down onto its hold - a curve, no
+     circling. Back: a circle round the island being left, then the forward route in reverse. */
   birdPath(i) {
     const A = this.stationFor(ISLANDS[i]), B = this.stationFor(ISLANDS[i + 1]);
-    const LA = new THREE.Vector3(ISLANDS[i].pos[0], 0, ISLANDS[i].pos[1]);
     const LB = new THREE.Vector3(ISLANDS[i + 1].pos[0], 0, ISLANDS[i + 1].pos[1]);
-    const RB = ISLANDS[i + 1].radius;
-    // measured from hold to hold, not island to island: a hold sits well off its island's
-    // centre, and a path laid from the centres doubled back on itself (storm -> forge)
+    // measured from hold to hold, not island to island: a hold sits well off its island's centre
     const span = new THREE.Vector3(B.x - A.x, 0, B.z - A.z);
     const D = span.length();
     const dir = span.clone().normalize();
     const side = new THREE.Vector3(dir.z, 0, -dir.x).multiplyScalar(i % 2 ? 1 : -1);
     const at = (along, aside, y) => A.clone().addScaledVector(dir, along).addScaledVector(side, aside).setY(y);
-    const pts = [A.clone()];
-    pts.push(at(D * 0.16, D * 0.06, A.y * 0.62));                           // off the hold, gliding down
-    if (D > 500) {                                                          // the long way to the storm:
-      pts.push(at(D * 0.34, -D * 0.08, 230));                               // up over the clouds
-      pts.push(at(D * 0.6, D * 0.1, 80));                                   // and back down
-    } else {
-      pts.push(at(D * 0.48, D * 0.24, 26));                                 // low over the water, off to one side
-    }
-    // in at the next island from its flank, then a sweep round it onto the hold
-    const fromA = Math.atan2(A.z - LB.z, A.x - LB.x);
-    const toHold = Math.atan2(B.z - LB.z, B.x - LB.x);
-    const turn = (i % 2 ? 1 : -1) * 1.25;
-    let sweep = toHold - (fromA + turn);
-    while (sweep > Math.PI) sweep -= 2 * Math.PI;
-    while (sweep < -Math.PI) sweep += 2 * Math.PI;
+    const lowY = 26;
+    const mid = [
+      at(D * 0.18, D * 0.05, THREE.MathUtils.lerp(A.y, lowY, 0.45)),        // off the hold, gliding down
+      at(D * 0.46, D * 0.16, lowY),                                         // the dive: low over the water
+      at(D * 0.76, D * 0.07, THREE.MathUtils.lerp(lowY, B.y, 0.6)),         // and the climb toward the island
+    ];
+    const lift = (p) => { p.y = Math.max(p.y, this.groundUnder(p.x, p.z) + 22); return p; };
+    mid.forEach(lift);
+    const forward = new THREE.CatmullRomCurve3([A.clone(), ...mid, B.clone()], false, 'centripetal');
+
+    // back: round the island first - the long way round, out of the hold and into the route
     const hold = Math.hypot(B.x - LB.x, B.z - LB.z);
-    const ring = (a, r, y) => new THREE.Vector3(LB.x + Math.cos(a) * r, y, LB.z + Math.sin(a) * r);
-    pts.push(ring(fromA + turn, Math.max(RB * 1.9, hold * 0.8), B.y * 0.45));
-    pts.push(ring(fromA + turn + sweep * 0.55, hold * 0.95, B.y * 0.72));
-    pts.push(B.clone());
-    // never through a hillside: lift any waypoint that sits too close to the ground
-    for (const p of pts) p.y = Math.max(p.y, this.groundUnder(p.x, p.z) + 22);
-    return new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+    const from = Math.atan2(B.z - LB.z, B.x - LB.x);
+    const exit = Math.atan2(mid[2].z - LB.z, mid[2].x - LB.x);
+    let sweep = exit - from;
+    while (sweep <= 0) sweep += 2 * Math.PI;              // counter-clockwise ...
+    if (sweep < Math.PI) sweep -= 2 * Math.PI;            // ... unless that is the short way: then clockwise
+    const ringY = Math.max(B.y * 0.75, 50);
+    const ring = [0.25, 0.5, 0.75].map((f) => lift(new THREE.Vector3(
+      LB.x + Math.cos(from + sweep * f) * hold * 1.05, THREE.MathUtils.lerp(B.y, ringY, Math.sin(Math.PI * f)),
+      LB.z + Math.sin(from + sweep * f) * hold * 1.05)));
+    const back = new THREE.CatmullRomCurve3([B.clone(), ...ring, ...mid.slice().reverse(), A.clone()], false, 'centripetal');
+    return { forward, back };
   }
 
   routeAt(p) {
@@ -665,29 +663,29 @@ export class World {
     return { u: 1, station: n - 1, local: 1, moving: false };
   }
 
-  /* One leg of the voyage, flown along its bird path. The camera looks ahead and down along
-     its course in mid-flight and turns to the island at both ends; it banks with the turn. */
-  flight(leg, e) {
-    const path = this.legs[leg];
-    const s = THREE.MathUtils.clamp(e, 0, 1);
+  /* One leg of the voyage. `e` runs 0 at the leg's first island to 1 at its second; `back`
+     says the camera entered from the second, so it flies the return route. Forward it looks at
+     where it is going; on the way back it looks the way it flies. It banks with the turn. */
+  flight(leg, e, back) {
+    const path = back ? this.legs[leg].back : this.legs[leg].forward;
+    const s = THREE.MathUtils.clamp(back ? 1 - e : e, 0, 1);
     const pos = path.getPointAt(s);
     const ahead = path.getPointAt(Math.min(1, s + 0.03));
     const behind = path.getPointAt(Math.max(0, s - 0.03));
-    const course = ahead.clone().sub(behind);
-    const flat = new THREE.Vector3(course.x, 0, course.z);
+    const flat = new THREE.Vector3(ahead.x - behind.x, 0, ahead.z - behind.z);
     if (flat.lengthSq() < 1e-6) flat.set(0, 0, -1);
     flat.normalize();
-    // where a bird would look: well ahead along its course, and down at the sea
-    const gaze = pos.clone().addScaledVector(flat, 140);
-    gaze.y = Math.max(0, pos.y - 70);
-    const LA = new THREE.Vector3(ISLANDS[leg].pos[0], 0, ISLANDS[leg].pos[1]);
-    const LB = new THREE.Vector3(ISLANDS[leg + 1].pos[0], 0, ISLANDS[leg + 1].pos[1]);
-    // a bird keeps its goal in sight: half the gaze is on the next island all the way, all of
-    // it from the approach on (looking only along the course filled the frame with empty sea)
-    const look = gaze.clone()
-      .lerp(LB, 0.6 + 0.4 * THREE.MathUtils.smoothstep(s, 0.4, 0.8))
-      .lerp(LA, 1 - THREE.MathUtils.smoothstep(s, 0, 0.2));
-    // bank with the turn: how far the course swings between just behind and just ahead
+    const gaze = pos.clone().addScaledVector(flat, 150);
+    gaze.y = Math.max(0, pos.y - 60);
+    const L0 = new THREE.Vector3(ISLANDS[leg].pos[0], 0, ISLANDS[leg].pos[1]);
+    const L1 = new THREE.Vector3(ISLANDS[leg + 1].pos[0], 0, ISLANDS[leg + 1].pos[1]);
+    const leaving = back ? L1 : L0, going = back ? L0 : L1;
+    const look = gaze.clone();
+    // forward a bird keeps its goal in sight; flying home it just watches the way ahead
+    if (!back) look.lerp(going, 0.72 + 0.28 * THREE.MathUtils.smoothstep(s, 0.4, 0.8));
+    else look.lerp(going, THREE.MathUtils.smoothstep(s, 0.82, 1));
+    look.lerp(leaving, 1 - THREE.MathUtils.smoothstep(s, 0, back ? 0.12 : 0.2));
+    // bank with the turn
     const a0 = Math.atan2(pos.z - behind.z, pos.x - behind.x);
     const a1 = Math.atan2(ahead.z - pos.z, ahead.x - pos.x);
     let swing = a1 - a0;
@@ -695,7 +693,6 @@ export class World {
     while (swing < -Math.PI) swing += 2 * Math.PI;
     const ends = THREE.MathUtils.smoothstep(s, 0, 0.12) * (1 - THREE.MathUtils.smoothstep(s, 0.88, 1));
     const roll = THREE.MathUtils.clamp(-swing * 220, -16, 16) * ends;
-    // low over the water the lens opens a touch: the sea rushes past
     const fov = 6 * (1 - THREE.MathUtils.smoothstep(pos.y, 30, 110)) * ends;
     return { pos, look, roll, fov };
   }
@@ -703,8 +700,12 @@ export class World {
   setCamera(p, elapsed) {
     const r = this.routeAt(p);
     let pos, look, roll = 0, fovKick = 0;
-    if (r.moving) ({ pos, look, roll, fov: fovKick } = this.flight(r.leg, r.e));
-    else {
+    // a leg's direction is the side the camera came in from, held until it reaches a hold
+    if (r.moving) {
+      if (this.activeLeg !== r.leg) { this.activeLeg = r.leg; this.legBack = r.e > 0.5; }
+      ({ pos, look, roll, fov: fovKick } = this.flight(r.leg, r.e, this.legBack));
+    } else {
+      this.activeLeg = null;
       pos = this.stationFor(ISLANDS[r.station]);
       look = new THREE.Vector3(ISLANDS[r.station].pos[0], 0, ISLANDS[r.station].pos[1]);
     }

@@ -306,6 +306,10 @@ async function boot() {
     const legs = Math.abs(chapterAt(pos) - index) || 1;
     const speed = msOverride ? Math.max(1, legs / 2) : Math.max(1, legs * 0.7);
     sailing = { to, index, speed };
+    // the frame starts sliding toward the next chapter's free side right away, so the island
+    // lands where it belongs instead of shifting once the text appears
+    const next = panels.find((p) => p.dataset.island === ISLANDS[index].id);
+    if (next) world.setTextSide(next.classList.contains('right') ? -1 : 1);
     // the chapter's text leaves at once: the turn of the page is felt before the camera moves
     document.body.classList.add('sailing');
     if (fresh) requestAnimationFrame(glide);
