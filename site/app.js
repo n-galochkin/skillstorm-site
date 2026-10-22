@@ -264,32 +264,48 @@ async function boot() {
   let quietUntil = 0;           // a trackpad keeps sending wheel events after a flick
   let lastWheel = 0;
 
-  // ease in, ease out: a bird lifting off and settling (sine in/out, then a cubic tail)
-  const ease = (k) => (k < 1 ? 0.5 - 0.5 * Math.cos(Math.PI * k) : 1);
+  /* The glide: one continuous motion toward a target that may change on the way. It wants to
+     close the distance at a pace that slows as it nears (the soft landing), but its speed can
+     change only so fast (the gentle lift-off), and a new target never resets that speed - so a
+     second flick carries on, and a turn back slows, stops and reverses instead of snapping. */
+  const step = () => (maxScroll() / TOTAL) * (HOLD + TRAVEL);   // one island to the next, in px
+  let lastT = 0;
   function glide(now) {
     if (!sailing) return;
-    const k = Math.min(1, (now - sailing.t0) / sailing.ms);
-    pos = sailing.from + (sailing.to - sailing.from) * ease(k);
-    scrollTo(0, pos);
-    if (k < 1) requestAnimationFrame(glide);
-    else {
+    const dt = Math.min(0.05, (now - lastT) / 1000 || 0.016);
+    lastT = now;
+    const d = sailing.to - pos;
+    const L = step();
+    // cruise speed, a braking that ends in finite time (no creeping tail) and a gentler
+    // lift-off: about three seconds island to island, soft at both ends
+    const vMax = L * 0.55 * sailing.speed;
+    const brake = L * 0.42 * sailing.speed;
+    const want = Math.sign(d) * Math.min(vMax, Math.sqrt(2 * brake * Math.abs(d)));
+    const aMax = L * 0.8 * sailing.speed;
+    vel += THREE.MathUtils.clamp(want - vel, -aMax * dt, aMax * dt);
+    pos += vel * dt;
+    if (Math.abs(d) < 0.5 && Math.abs(vel) < 6) {
+      pos = sailing.to; scrollTo(0, pos);
       sailing = null; vel = 0;
       document.body.classList.remove('sailing');
       quietUntil = performance.now() + 250;
+      return;
     }
+    scrollTo(0, pos);
+    requestAnimationFrame(glide);
   }
 
   function sailTo(index, msOverride) {
     index = THREE.MathUtils.clamp(index, 0, n - 1);
     const to = holdTop(index);
     if (reduced) { scrollTo(0, to); return; }
-    const from = scrollY;
-    if (Math.abs(to - from) < 2) return;
-    // about three seconds a leg; a jump of several islands takes longer, but not much
-    const legs = Math.abs(chapterAt(from) - index) || 1;
-    const ms = msOverride || Math.min(3000 + (legs - 1) * 1100, 6500);
+    if (!sailing && Math.abs(to - scrollY) < 2) return;
     const fresh = !sailing;
-    sailing = { to, index, from, t0: performance.now(), ms };
+    if (fresh) { pos = scrollY; vel = 0; lastT = performance.now(); }
+    // a long way (home from the far end, a click on the chart) flies faster, not longer
+    const legs = Math.abs(chapterAt(pos) - index) || 1;
+    const speed = msOverride ? Math.max(1, legs / 2) : Math.max(1, legs * 0.7);
+    sailing = { to, index, speed };
     // the chapter's text leaves at once: the turn of the page is felt before the camera moves
     document.body.classList.add('sailing');
     if (fresh) requestAnimationFrame(glide);

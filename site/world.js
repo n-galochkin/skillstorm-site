@@ -708,8 +708,27 @@ export class World {
       pos = this.stationFor(ISLANDS[r.station]);
       look = new THREE.Vector3(ISLANDS[r.station].pos[0], 0, ISLANDS[r.station].pos[1]);
     }
-    // the bank is smoothed frame to frame, so a turn never snaps the horizon
-    this.rollSm = THREE.MathUtils.damp(this.rollSm || 0, roll, 3, 1 / 60);
+    // the real camera trails the computed one by about a quarter of a second: every corner
+    // where a flight meets a hold or the next flight is rounded off. A still frame (a capture,
+    // the first frame) or a long gap snaps straight to it; coming back from the fight glides.
+    const dt = this.lastElapsed === undefined ? 0 : elapsed - this.lastElapsed;
+    this.lastElapsed = elapsed;
+    const snap = !this.camPos || dt <= 0 || dt > 0.25;
+    if (snap) {
+      this.camPos = pos.clone(); this.camLook = look.clone(); this.rollSm = roll;
+    } else {
+      if (this.detached) {   // the fight moved the camera itself: start from where it is now
+        this.camPos.copy(this.camera.position);
+        this.camLook.copy(this.camera.position).add(this.camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(150));
+      }
+      const k = 1 - Math.exp(-4.2 * dt);
+      this.camPos.lerp(pos, k);
+      this.camLook.lerp(look, k);
+      this.rollSm = THREE.MathUtils.damp(this.rollSm || 0, roll, 3, dt);
+    }
+    this.detached = false;
+    pos = this.camPos.clone();
+    look = this.camLook.clone();
     roll = this.rollSm;
     // the frame leans a little toward the mouse, the way IVRESS's does (set by the page)
     this.lean = this.lean || new THREE.Vector2();
@@ -740,6 +759,7 @@ export class World {
   }
 
   focusIsland(spec, zoom) {
+    this.detached = true;     // the voyage camera picks up from here when the fight ends
     this.camera.position.copy(this.stationFor(spec, zoom));
     this.camera.lookAt(spec.pos[0], 0, spec.pos[1]);
   }
