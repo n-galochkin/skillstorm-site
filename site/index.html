@@ -387,7 +387,7 @@ body.hero-on .cue{left:auto; right:calc(var(--gut-r) + 120px); bottom:calc(env(s
 .panel.hero h2{font-size:clamp(32px, 3.1vw, 54px); line-height:1.06; text-wrap:wrap; max-width:none}
 .panel.hero .act{flex-direction:row; align-items:center; max-width:none; width:100%}
 /* the hero carries the logo itself; the header's copy would sit right on top of it */
-body.hero-on .masthead .mark{opacity:0}
+body.hero-on .masthead .mark{opacity:0; pointer-events:none}
 .masthead .mark{transition:opacity .4s ease}
 .panel.hero .act{gap:14px; flex-wrap:wrap}
 .panel .act a.ghost{text-decoration:none}
@@ -643,6 +643,10 @@ html.sword-cursor, html.sword-cursor *{cursor:none!important}
 }
 /* while the page sails to the next island the chapter's text is already gone */
 body.sailing .panel{opacity:0 !important; pointer-events:none; transition:opacity .25s ease}
+/* the logo takes you home, to the cover */
+.masthead .home{pointer-events:auto; cursor:pointer}
+.home img{transition:filter .25s, transform .25s}
+.home:hover img{filter:brightness(1.15) drop-shadow(0 0 10px rgba(242,197,92,.45)); transform:scale(1.03)}
 </style>
 
 <canvas id="sea"></canvas>
@@ -678,7 +682,7 @@ body.sailing .panel{opacity:0 !important; pointer-events:none; transition:opacit
   </div>
 
   <footer class="foot ui">
-    <img src="assets/logo.webp" alt="Skillstorm" width="900" height="233">
+    <a class="home" href="./" aria-label="Skillstorm, back to the start"><img src="assets/logo.webp" alt="Skillstorm" width="900" height="233"></a>
     <nav>
       <a href="https://www.youtube.com/@NikitaGalochkin" target="_blank" rel="noopener">YouTube</a>
       <a href="https://www.tiktok.com/@solodevich" target="_blank" rel="noopener">TikTok</a>
@@ -691,7 +695,7 @@ body.sailing .panel{opacity:0 !important; pointer-events:none; transition:opacit
 </section>
 
 <header class="masthead">
-  <span class="mark"><img src="assets/logo.webp" alt="Skillstorm" width="900" height="233"></span>
+  <a class="mark home" href="./" aria-label="Skillstorm, back to the start"><img src="assets/logo.webp" alt="Skillstorm" width="900" height="233"></a>
   <span class="spacer"></span>
   <a class="ghost follow" href="https://www.youtube.com/@NikitaGalochkin" target="_blank" rel="noopener">Follow the devlog</a>
 </header>

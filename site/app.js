@@ -7,6 +7,10 @@ import { buildWeb } from './combo_web.js';
 import { ISLANDS, ISLETS } from './archipelago.js';
 
 const $ = (id) => document.getElementById(id);
+// a reload always opens on the cover: the browser's own scroll restoration landed past the
+// voyage (the track is sized by script after load), in the end section
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+scrollTo(0, 0);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ----------------------------------------------------------- language */
@@ -229,6 +233,7 @@ async function boot() {
   const track = $('track');
   const unitVh = LIGHT ? 64 : 76;   // the track keeps its old length with the shorter holds
   track.style.height = (TOTAL * unitVh) + 'vh';
+  scrollTo(0, 0);   // and once more now the track has its height
 
   let progress = 0;
   let playing = false;
@@ -274,7 +279,7 @@ async function boot() {
     }
   }
 
-  function sailTo(index) {
+  function sailTo(index, msOverride) {
     index = THREE.MathUtils.clamp(index, 0, n - 1);
     const to = holdTop(index);
     if (reduced) { scrollTo(0, to); return; }
@@ -282,7 +287,7 @@ async function boot() {
     if (Math.abs(to - from) < 2) return;
     // about three seconds a leg; a jump of several islands takes longer, but not much
     const legs = Math.abs(chapterAt(from) - index) || 1;
-    const ms = Math.min(3000 + (legs - 1) * 1100, 6500);
+    const ms = msOverride || Math.min(3000 + (legs - 1) * 1100, 6500);
     const fresh = !sailing;
     sailing = { to, index, from, t0: performance.now(), ms };
     // the chapter's text leaves at once: the turn of the page is felt before the camera moves
@@ -393,6 +398,13 @@ async function boot() {
     verdict.classList.remove('on');
     $('stick').classList.remove('on');
   }
+  // the logo goes home: out of the fight if need be, then the flight back to the cover
+  document.querySelectorAll('.home').forEach((el) => el.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (playing) exitPlay();
+    if (scrollY > maxScroll() + 2) scrollTo({ top: maxScroll(), behavior: 'auto' });
+    sailTo(0, 3800);   // home is one swift flight back, however far the voyage went
+  }));
   $('playBtn').addEventListener('click', enterPlay);
   const sail = $('sailBtn');
   // "Play in your browser": straight into the fight (the camera finds the arena by
