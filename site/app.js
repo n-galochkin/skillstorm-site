@@ -295,10 +295,26 @@ async function boot() {
     requestAnimationFrame(glide);
   }
 
+  // more than one island away: the page goes there at once and the camera flies straight to it
+  let directTimer = 0;
+  function flyStraight(index) {
+    if (sailing) { sailing = null; vel = 0; }
+    const seconds = world.flyTo(index);
+    pos = holdTop(index);
+    scrollTo(0, pos);
+    const next = panels.find((p) => p.dataset.island === ISLANDS[index].id);
+    if (next) world.setTextSide(next.classList.contains('right') ? -1 : 1);
+    document.body.classList.add('sailing');
+    clearTimeout(directTimer);
+    directTimer = setTimeout(() => document.body.classList.remove('sailing'), seconds * 1000);
+  }
+
   function sailTo(index, msOverride) {
     index = THREE.MathUtils.clamp(index, 0, n - 1);
     const to = holdTop(index);
     if (reduced) { scrollTo(0, to); return; }
+    const from = sailing ? sailing.index : chapterAt(Math.min(scrollY, maxScroll()));
+    if (Math.abs(from - index) > 1 || scrollY > maxScroll() + 2) { flyStraight(index); return; }
     if (!sailing && Math.abs(to - scrollY) < 2) return;
     const fresh = !sailing;
     if (fresh) { pos = scrollY; vel = 0; lastT = performance.now(); }
@@ -422,8 +438,7 @@ async function boot() {
   document.querySelectorAll('.home').forEach((el) => el.addEventListener('click', (e) => {
     e.preventDefault();
     if (playing) exitPlay();
-    if (scrollY > maxScroll() + 2) scrollTo({ top: maxScroll(), behavior: 'auto' });
-    sailTo(0, 3800);   // home is one swift flight back, however far the voyage went
+    sailTo(0);   // from far away this is one straight flight home
   }));
   $('playBtn').addEventListener('click', enterPlay);
   const sail = $('sailBtn');

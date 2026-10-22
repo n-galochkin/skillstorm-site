@@ -697,11 +697,42 @@ export class World {
     return { pos, look, roll, fov };
   }
 
+  /* Fly straight to an island, whatever the scroll says: one arc from where the camera is now,
+     high over the archipelago, down onto the island's hold. Returns the flight's length in s. */
+  flyTo(index) {
+    const to = this.stationFor(ISLANDS[index]);
+    const from = this.camera.position.clone();
+    const dist = Math.hypot(to.x - from.x, to.z - from.z);
+    const seconds = THREE.MathUtils.clamp(2.4 + dist / 650, 2.4, 4);
+    this.direct = { index, from, fromLook: (this.camLook || to).clone(), to, dist, t0: this.lastElapsed || 0, seconds };
+    return seconds;
+  }
+
+  directPose(elapsed) {
+    const d = this.direct;
+    const k = THREE.MathUtils.clamp((elapsed - d.t0) / d.seconds, 0, 1);
+    if (k >= 1) { this.direct = null; return null; }
+    const s = 0.5 - 0.5 * Math.cos(Math.PI * k);            // lift off slowly, land slowly
+    const target = new THREE.Vector3(ISLANDS[d.index].pos[0], 0, ISLANDS[d.index].pos[1]);
+    // one arc: a quadratic curve whose top rides high over the islands in between
+    const top = d.from.clone().lerp(d.to, 0.5);
+    top.y = Math.max(d.from.y, d.to.y) + Math.min(260, 60 + d.dist * 0.22);
+    const pos = d.from.clone().multiplyScalar((1 - s) * (1 - s))
+      .addScaledVector(top, 2 * s * (1 - s)).addScaledVector(d.to, s * s);
+    // the bird turns to its goal first, then keeps it in sight all the way
+    const look = d.fromLook.clone().lerp(target, THREE.MathUtils.smoothstep(k, 0, 0.35));
+    return { pos, look };
+  }
+
   setCamera(p, elapsed) {
     const r = this.routeAt(p);
     let pos, look, roll = 0, fovKick = 0;
-    // a leg's direction is the side the camera came in from, held until it reaches a hold
-    if (r.moving) {
+    const direct = this.direct && this.directPose(elapsed);
+    // a straight flight overrides the route; on the route a leg's direction is the side the
+    // camera came in from, held until it reaches a hold
+    if (direct) {
+      ({ pos, look } = direct);
+    } else if (r.moving) {
       if (this.activeLeg !== r.leg) { this.activeLeg = r.leg; this.legBack = r.e > 0.5; }
       ({ pos, look, roll, fov: fovKick } = this.flight(r.leg, r.e, this.legBack));
     } else {
