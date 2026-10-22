@@ -9,7 +9,6 @@ import { ISLANDS, ISLETS } from './archipelago.js';
 import { makeSeaStack, shoreline, fbm, PALETTE } from './islands.js';
 import { loadTerrain, shoreAt } from './terrain.js';
 import { Ocean } from './water.js';
-import { dubins } from './dubins.js';
 import { Sky } from './sky.js';
 import { Clouds } from './atmosphere.js';
 import { Gulls } from './gulls.js';
@@ -33,10 +32,12 @@ export const LIGHT = (() => {
 })();
 
 // the scroll track: a short hold at each island, a long stretch between them
-// how fast it turns on the spot (radians a second, on average over the turn)
-const PIVOT_RATE = THREE.MathUtils.degToRad(85);
-// how far the head may look aside from the course, and the longest a flight may take (seconds)
-const SIDE = THREE.MathUtils.degToRad(55);
+// how far the head may look aside from the course (and the course start or end off the straight
+// way), and the longest a flight may take (seconds)
+const SIDE = THREE.MathUtils.degToRad(45);
+// how far it may look aside from the course to keep an island in the frame (a bird watching an
+// island over its wing as it swings round it)
+const LOOK_ASIDE = THREE.MathUtils.degToRad(80);
 const MAX_FLIGHT = 4;
 export const HOLD = 0.2, TRAVEL = 1.45;
 
@@ -609,61 +610,48 @@ export class World {
   target() { return this.voyage.flight ? this.voyage.flight.to : this.voyage.station; }
   isFlying() { return !!this.voyage.flight; }
 
-  /* A bird's path from a pose (position, horizontal heading) to an island's hold. On the ground
-     plan it is a Dubins path - the shortest way for something that only flies forward and turns no
-     tighter than a radius - so it never flies backwards or flips. Setting off from a hover it may
-     first turn on the spot, and landing it may turn its head the last bit: whichever mix of turning
-     on the spot and turning in flight is quickest (Nikita 2026-10-22: "если остров рядом, лишние
-     зигзаги не нужны, можно прямо лететь"). Over the plan goes a height profile: a dive low over
-     the water for a near island, a climb over the archipelago for a far one, and never less than
-     40 m over any island it crosses. Returns the curve and how far to turn before and after. */
-  birdPath(P0, H0, to, free = true) {
+  /* A bird's path from a pose (position, horizontal heading) to an island's hold: one smooth swoop
+     (a Hermite curve). It sets off along the way it faces - or up to SIDE off it, toward the goal -
+     and comes in facing the island - or up to SIDE off, from the way it came. So a near island is
+     flown to almost straight; one behind is reached by a short swing round at the slow start of the
+     flight, never by a loop or a stop. Over the plan goes a height profile: a dive low over the water
+     for a near island, a climb over the archipelago for a far one, and never less than 40 m over any
+     island it crosses. */
+  birdPath(P0, H0, to) {
     const B = this.stationFor(ISLANDS[to]);
-    const LB = new THREE.Vector3(ISLANDS[to].pos[0], 0, ISLANDS[to].pos[1]);
-    const yawA0 = Math.atan2(LB.z - B.z, LB.x - B.x);                         // facing at the hold
-    const yawS0 = Math.atan2(H0.z, H0.x);
-    const R = 80, STEP = 25, deg = Math.PI / 180;
-    const pivot = (a) => Math.abs(a) / PIVOT_RATE;                              // seconds turning on the spot
-    const straight = Math.hypot(B.x - P0.x, B.z - P0.z);
-    let best = null;
-    for (let ds = free ? -180 : 0; ds <= (free ? 180 : 0); ds += 15) {
-      // next door it may come in on any course and turn round once it hovers: straight there, no hook
-      const daMax = straight < 400 ? 120 : 90;
-      for (let da = -daMax; da <= daMax; da += 15) {
-        const thS = yawS0 + ds * deg, thA = yawA0 - da * deg;                 // lands da short of facing it
-        const pl = dubins(P0.x, P0.z, thS, B.x, B.z, thA, R, STEP);
-        // flight time is about length over a cruising pace; a turn on the spot costs a little extra,
-        // it is the less bird-like of the two
-        // and a hook - path longer than the straight line - is what the eye notices most
-        const cost = pl.length / 170 + (pl.length - straight) / (this.hookCost || 60)
-          + 1.15 * (pivot(Math.max(0, Math.abs(ds * deg) - SIDE)) * 0.7 + pivot(Math.max(0, Math.abs(da * deg) - SIDE)));
-        if (!best || cost < best.cost) best = { cost, plan: pl, ds: ds * deg, da: da * deg };
-      }
-    }
-    // the joins between the plan's arcs leave points a metre apart; on the curve they made a kink the
-    // speed plan read as a hairpin (3 m/s for seconds), so points closer than half a step go
-    const plan = { pts: [best.plan.pts[0]], length: best.plan.length };
-    for (const q of best.plan.pts.slice(1)) {
-      const last = plan.pts[plan.pts.length - 1];
-      if (Math.hypot(q.x - last.x, q.y - last.y) >= STEP * 0.5) plan.pts.push(q);
-    }
-    const tail = best.plan.pts[best.plan.pts.length - 1];
-    if (plan.pts.length > 1) plan.pts[plan.pts.length - 1] = tail; else plan.pts.push(tail);
-    const L = plan.length;
-    const far = Math.hypot(B.x - P0.x, B.z - P0.z) > 650;      // a far island: over the archipelago, not round it
-    const n = plan.pts.length;
-    const pts = plan.pts.map((q, i) => {
-      const u = n > 1 ? i / (n - 1) : 1;
+    const flat = (x, z) => new THREE.Vector3(x, 0, z).normalize();
+    const toB = flat(B.x - P0.x, B.z - P0.z);
+    const FB = flat(ISLANDS[to].pos[0] - B.x, ISLANDS[to].pos[1] - B.z);   // facing at the hold
+    // a direction turned toward another by at most SIDE
+    const toward = (v, goal) => {
+      const a = Math.atan2(v.z, v.x);
+      let d = Math.atan2(goal.z, goal.x) - a;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      const r = a + THREE.MathUtils.clamp(d, -SIDE, SIDE);
+      return new THREE.Vector3(Math.cos(r), 0, Math.sin(r));
+    };
+    const t0 = toward(H0, toB), t1 = toward(FB, toB);
+    const d = Math.hypot(B.x - P0.x, B.z - P0.z);
+    // the swing at each end: wide when it already points the right way, tight when it must come round
+    const k = this.tanK ?? 0.75;
+    const a0 = d * k * (0.4 + 0.6 * Math.max(0, t0.dot(toB)));
+    const a1 = d * k * (0.4 + 0.6 * Math.max(0, t1.dot(toB)));
+    const n = Math.max(12, Math.ceil(d / 18));
+    const far = d > 650;      // a far island: over the archipelago, not round it
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const u = i / n, u2 = u * u, u3 = u2 * u;
+      const h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u, h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
+      const x = h00 * P0.x + h10 * t0.x * a0 + h01 * B.x + h11 * t1.x * a1;
+      const z = h00 * P0.z + h10 * t0.z * a0 + h01 * B.z + h11 * t1.z * a1;
       const base = THREE.MathUtils.lerp(P0.y, B.y, u);
       const bump = Math.pow(Math.sin(Math.PI * u), 0.9);
       // near: dip toward the water; far: rise over the islands
       const y = far ? base + (Math.max(base, 175) - base) * bump : base - (base - 42) * bump * 0.85;
-      return new THREE.Vector3(q.x, y, q.y);
-    });
+      pts.push(new THREE.Vector3(x, y, z));
+    }
     for (let i = 1; i < pts.length - 1; i++) pts[i].y = Math.max(pts[i].y, this.groundUnder(pts[i].x, pts[i].z) + 40);
-    pts[0].copy(P0);
-    pts[pts.length - 1].copy(B);
-    return { curve: new THREE.CatmullRomCurve3(pts, false, 'centripetal'), pre: best.ds, post: best.da, thA: yawA0 - best.da };
+    return new THREE.CatmullRomCurve3(pts, false, 'centripetal');
   }
 
   /* Fly to an island from wherever the camera is, the way it faces. Mid-flight this starts a new
@@ -678,31 +666,17 @@ export class World {
     if (heading.lengthSq() < 1e-6) heading.set(0, 0, -1);
     heading.normalize();
     const v0 = v.flight ? v.flight.speed || 0 : 0;
-    // hovering (or nearly) it may turn on the spot first; on the wing it turns by flying
-    const { curve, pre, post, thA } = this.birdPath(from, heading, index, v0 < 20);
-    const { times, seconds: flySec } = this.speedPlan(curve, v0);
-    // it turns on the spot before take-off and after landing, but its head only turns past what it
-    // may look aside (SIDE): in flight it never looks further off its course than that
-    let preSec = pre ? Math.max(0, Math.abs(pre) - SIDE) / PIVOT_RATE + 0.2 : 0;
-    let postSec = Math.abs(post) > SIDE ? (Math.abs(post) - SIDE) / PIVOT_RATE + 0.15 : 0;
-    // the trailing camera is still drifting in for a moment after the path ends: it turns once it hovers
-    let postWait = postSec > 0 ? 0.3 : 0;
-    // it sets off once its head has come round (the real camera's gaze trails a little behind)
-    let flyFrom = preSec > 0.25 ? preSec + 0.15 : preSec;
-    let fly = flySec;
+    const curve = this.birdPath(from, heading, index);
+    const { times } = this.speedPlan(curve, v0);
     // no flight longer than MAX_FLIGHT (Nikita 2026-10-22: "не больше 4 секунд"): a long one is
-    // flown faster throughout, turns and all
-    const squeeze = Math.min(1, MAX_FLIGHT / (flyFrom + fly + postWait + postSec));
-    if (squeeze < 1) {
-      for (let i = 0; i < times.length; i++) times[i] *= squeeze;
-      fly *= squeeze; preSec *= squeeze; flyFrom *= squeeze; postSec *= squeeze; postWait *= squeeze;
-    }
+    // flown faster throughout
+    const squeeze = Math.min(1, MAX_FLIGHT / times[times.length - 1]);
+    for (let i = 0; i < times.length; i++) times[i] *= squeeze;
     v.flight = {
       // the chart's ship sets off from where it is now, not from where the first flight began
       to: index, from: v.flight ? this.voyageState(elapsed).u : v.station, curve, times, t0: elapsed,
-      seconds: flyFrom + fly + postWait + postSec, flySec: fly, flyFrom, preSec, postSec, postWait, pre, post, thA,
-      start: from, yaw0: Math.atan2(heading.z, heading.x),
-      moving: !!v.flight, lookFrom: lookNow, sideFrom: this.side || 0, heading, speed: v0,
+      seconds: times[times.length - 1], moving: !!v.flight, lookFrom: lookNow, sideFrom: this.side || 0,
+      heading, speed: v0, fromIsle: v.flight ? -1 : v.station,
     };
     return v.flight.seconds;
   }
@@ -768,29 +742,27 @@ export class World {
   /* the pose along the current flight, or null once it has landed */
   flightPose(elapsed) {
     const v = this.voyage, f = v.flight;
-    const k = THREE.MathUtils.clamp((elapsed - f.t0) / f.seconds, 0, 1);
-    if (k >= 1) { v.station = f.to; v.flight = null; v.arrivedAt = elapsed; return null; }
+    const te = elapsed - f.t0;
+    if (te >= f.seconds) { v.station = f.to; v.flight = null; v.arrivedAt = elapsed; return null; }
     // the share of the path flown by now, from the speed plan's timetable
-    const T = f.times, N = T.length - 1, te = Math.min(elapsed - f.t0 - f.flyFrom, f.flySec);
+    const T = f.times, N = T.length - 1;
     let lo = 0, hi = N;
     while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (T[mid] <= te) lo = mid; else hi = mid; }
     const frac = THREE.MathUtils.clamp((te - T[lo]) / Math.max(1e-6, T[hi] - T[lo]), 0, 1);
     const s = (lo + frac) / N;
     f.s = s;
-    f.speed = te <= 0 || te >= f.flySec ? 0 : f.curve.getLength() / N / Math.max(1e-6, T[hi] - T[lo]);
-    const ease = (x) => 0.5 - 0.5 * Math.cos(Math.PI * THREE.MathUtils.clamp(x, 0, 1));
-    const yawPre = f.pre * (f.preSec > 0 ? ease((elapsed - f.t0) / f.preSec) : 1);
     const c = f.curve;
+    f.speed = c.getLength() / N / Math.max(1e-6, T[hi] - T[lo]);
+    const ease = (x) => 0.5 - 0.5 * Math.cos(Math.PI * THREE.MathUtils.clamp(x, 0, 1));
     const pos = c.getPointAt(s);
-    const ahead = c.getPointAt(Math.min(1, s + 0.025)), behind = c.getPointAt(Math.max(0, s - 0.025));
+    const ahead = c.getPointAt(Math.min(1, s + 0.02)), behind = c.getPointAt(Math.max(0, s - 0.02));
     const flat = new THREE.Vector3(ahead.x - behind.x, 0, ahead.z - behind.z);
-    if (te <= 0) f.heading.set(Math.cos(f.yaw0 + yawPre), 0, Math.sin(f.yaw0 + yawPre));     // still turning on the spot
-    else if (flat.lengthSq() > 1e-6) f.heading = flat.clone().normalize();
+    if (flat.lengthSq() > 1e-6) f.heading = flat.clone().normalize();
     // it looks where it flies, but keeps an island in the frame: the head turns aside from the
-    // course - at most SIDE - toward the island that matters most just now (the one it flies to,
-    // else the nearest, the one most nearly ahead). A soft choice, so the gaze never jumps from
-    // one island to another (Nikita 2026-10-22: "чтобы в видимой части оставался остров, можно
-    // чуть боком лететь").
+    // course - softly, at most SIDE - toward the island that matters most just now (the one it flies
+    // to, else the nearest, the one most nearly ahead). The weights change smoothly, so the gaze
+    // never jumps from one island to another (Nikita 2026-10-22: "чтобы в видимой части оставался
+    // остров, можно чуть боком лететь").
     const hy = Math.atan2(f.heading.z, f.heading.x);
     let fx = 0, fz = 0, fd = 0, fw = 0;
     ISLANDS.forEach((isle, i) => {
@@ -798,26 +770,22 @@ export class World {
       const dist = Math.hypot(dx, dz);
       let off = Math.atan2(dz, dx) - hy;
       off = Math.atan2(Math.sin(off), Math.cos(off));
-      const score = Math.abs(off) * 57.3 + Math.max(0, dist - isle.radius) / 12 - (i === f.to ? 30 : 0);
-      const wgt = Math.exp(-score / 10);
+      // the island it leaves and the one it flies to stay in view even when they lie well to the side
+      // (swinging round one, it watches it over its wing); others only when they are ahead
+      const ends = i === f.to ? 3 * (0.4 + 0.6 * s) : i === f.fromIsle ? 3 * (1 - s) ** 2 : 0;
+      const wgt = ends > 0
+        ? (Math.cos(off) + 1) ** 2 * ends / (1 + Math.max(0, dist - isle.radius) / 400)
+        : Math.max(0, Math.cos(off)) ** 3 / (1 + Math.max(0, dist - isle.radius) / 250);
       fx += Math.cos(off) * wgt; fz += Math.sin(off) * wgt; fd += dist * wgt; fw += wgt;
     });
-    const aside = fw > 1e-9 ? THREE.MathUtils.clamp(Math.atan2(fz, fx), -SIDE, SIDE) : 0;
+    const aside = fw > 1e-9 ? LOOK_ASIDE * Math.tanh(Math.atan2(fz, fx) / LOOK_ASIDE) : 0;
     // never so near that it stares straight down from a height (the volcano's hold is 280 m up)
     const reach = THREE.MathUtils.clamp(fw > 1e-9 ? fd / fw : 320, Math.max(160, pos.y * 1.3), 460);
     const gaze = new THREE.Vector3(pos.x + Math.cos(hy + aside) * reach, 0, pos.z + Math.sin(hy + aside) * reach);
     const island = new THREE.Vector3(ISLANDS[f.to].pos[0], 0, ISLANDS[f.to].pos[1]);
-    // from where it looked as it hovered; onto the island as it lands, as far as SIDE allows while
-    // it still flies, the rest once it hovers
-    const end = f.curve.getPointAt(1);
-    let offEnd = Math.atan2(island.z - end.z, island.x - end.x) - f.thA;
-    offEnd = Math.atan2(Math.sin(offEnd), Math.cos(offEnd));
-    const settle = f.postSec > 0 ? ease((elapsed - f.t0 - f.flyFrom - f.flySec - f.postWait) / f.postSec) : 1;
-    const yawEnd = f.thA + THREE.MathUtils.lerp(THREE.MathUtils.clamp(offEnd, -SIDE, SIDE), offEnd, settle);
-    const toIsle = Math.hypot(island.x - end.x, island.z - end.z);
-    const lookEnd = new THREE.Vector3(end.x + Math.cos(yawEnd) * toIsle, 0, end.z + Math.sin(yawEnd) * toIsle);
-    const look = f.lookFrom.clone().lerp(gaze, ease((elapsed - f.t0) / Math.max(0.4, f.preSec)))
-      .lerp(lookEnd, THREE.MathUtils.smoothstep(s, 0.84, 1));
+    // from where it looked as it hovered, and onto the island as it lands
+    const look = f.lookFrom.clone().lerp(gaze, ease(te / 0.6))
+      .lerp(island, THREE.MathUtils.smoothstep(s, 0.85, 1));
     const a0 = Math.atan2(pos.z - behind.z, pos.x - behind.x), a1 = Math.atan2(ahead.z - pos.z, ahead.x - pos.x);
     let turn = a1 - a0;
     while (turn > Math.PI) turn -= 2 * Math.PI;
@@ -828,7 +796,7 @@ export class World {
     // the frame's sideways offset rides along with the flight
     const sideTo = this.sides ? this.sides[f.to] : 0;
     const side = THREE.MathUtils.lerp(f.sideFrom, sideTo, THREE.MathUtils.smoothstep(s, 0.05, 0.95));
-    return { pos, look, roll, fov, side, k };
+    return { pos, look, roll, fov, side, k: te / f.seconds };
   }
 
   /* where the voyage stands, for the page: the island held or flown to, flying or not, and a
@@ -860,25 +828,43 @@ export class World {
     const dt = this.lastElapsed === undefined ? 0 : elapsed - this.lastElapsed;
     this.lastElapsed = elapsed;
     const snap = !this.camPos || dt <= 0 || dt > 0.25;
+    // the gaze as two angles (round, and down) that follow their targets like a spring with damping:
+    // the head speeds up and slows down smoothly, never jumps in speed (the plain follow it had
+    // before turned at full speed the moment a target moved - that read as a twitch)
+    const angles = (from, to) => {
+      const d = to.clone().sub(from);
+      return [Math.atan2(d.z, d.x), Math.atan2(-d.y, Math.hypot(d.x, d.z)), d.length()];
+    };
     if (snap) {
       this.camPos = pos.clone(); this.camLook = look.clone(); this.rollSm = roll;
+      [this.gazeYaw, this.gazePitch] = angles(pos, look);
+      this.gazeYawVel = 0; this.gazePitchVel = 0;
     } else {
       if (this.detached) {
         this.camPos.copy(this.camera.position);
         this.camLook.copy(this.camera.position).add(this.camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(150));
+        [this.gazeYaw, this.gazePitch] = angles(this.camPos, this.camLook);
+        this.gazeYawVel = 0; this.gazePitchVel = 0;
       }
       const k = 1 - Math.exp(-5 * dt);
       this.camPos.lerp(pos, k);
-      // the gaze turns at most 130 degrees a second, whatever the path does: a bird's head never snaps
-      const want = look.clone().sub(this.camPos);
-      const have = this.camLook.clone().sub(this.camPos);
-      const reach = THREE.MathUtils.lerp(have.length(), want.length(), k);
-      const wantDir = want.normalize(), haveDir = have.normalize();
-      const angle = haveDir.angleTo(wantDir);
-      const step = Math.min(angle * k * 1.6, THREE.MathUtils.degToRad(130) * dt);
-      const dirNow = angle > 1e-5
-        ? haveDir.clone().applyQuaternion(new THREE.Quaternion().setFromUnitVectors(haveDir, wantDir).slerp(new THREE.Quaternion(), 1 - step / angle))
-        : wantDir;
+      const [yawT, pitchT, reachT] = angles(this.camPos, look);
+      const reach = THREE.MathUtils.lerp(this.camLook.distanceTo(this.camPos), reachT, k);
+      // critically damped follow (as in Unity's SmoothDamp), at most 150 degrees a second
+      const follow = (cur, target, vel, T, maxRate) => {
+        const w = 2 / T, x = w * dt, e = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+        const change = THREE.MathUtils.clamp(cur - target, -maxRate * T, maxRate * T);
+        const temp = (vel + w * change) * dt;
+        return [cur - change + (change + temp) * e, (vel - w * temp) * e];
+      };
+      let dy = yawT - this.gazeYaw;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      const maxRate = THREE.MathUtils.degToRad(150);
+      const [yN, yV] = follow(0, dy, this.gazeYawVel, 0.22, maxRate);
+      this.gazeYaw += yN; this.gazeYawVel = yV;
+      [this.gazePitch, this.gazePitchVel] = follow(this.gazePitch, pitchT, this.gazePitchVel, 0.22, maxRate);
+      const cp = Math.cos(this.gazePitch);
+      const dirNow = new THREE.Vector3(cp * Math.cos(this.gazeYaw), -Math.sin(this.gazePitch), cp * Math.sin(this.gazeYaw));
       this.camLook.copy(this.camPos).addScaledVector(dirNow, reach);
       this.rollSm = THREE.MathUtils.damp(this.rollSm || 0, roll, 3, dt);
     }
