@@ -1,7 +1,7 @@
 /* Wiring: scroll sails the camera, each island shows its panel, the second one
    hands over the controls. */
 import * as THREE from 'three';
-import { World, LIGHT } from './world.js';
+import { World, LIGHT, HOLD, TRAVEL } from './world.js';
 import { Fight } from './fight.js';
 import { buildWeb } from './combo_web.js';
 import { ISLANDS, ISLETS } from './archipelago.js';
@@ -225,9 +225,9 @@ async function boot() {
 
   /* ---- scroll track ---- */
   const n = ISLANDS.length;
-  const TOTAL = n * 1.0 + (n - 1) * 1.45;
+  const TOTAL = n * HOLD + (n - 1) * TRAVEL;
   const track = $('track');
-  const unitVh = LIGHT ? 48 : 58;
+  const unitVh = LIGHT ? 64 : 76;   // the track keeps its old length with the shorter holds
   track.style.height = (TOTAL * unitVh) + 'vh';
 
   let progress = 0;
@@ -245,48 +245,49 @@ async function boot() {
      (call to action, questions, footer), and rolling back up from there lands on
      the last island again. */
   // the cover is the top of the page itself; every other island is held mid-stop
-  const holdTop = (index) => (index ? ((index * 2.45 + 0.5) / TOTAL) * maxScroll() : 0);
+  const holdTop = (index) => (index ? ((index * (HOLD + TRAVEL) + HOLD / 2) / TOTAL) * maxScroll() : 0);
   const chapterAt = (y) => {
     let best = 0;
     for (let i = 1; i < n; i++) if (Math.abs(holdTop(i) - y) < Math.abs(holdTop(best) - y)) best = i;
     return best;
   };
-  /* The page moves on a spring, not a timed tween: the first touch of the wheel already
-     gives it a push in that direction (so the visitor sees at once that it took), and the
-     spring then carries it on to the next island and settles there. A finger drags the
-     page like a rubber band; letting go either sails on or springs back. */
-  const W = 3.9;                // spring stiffness: about 1.7 s, long enough for a manoeuvre to read
+  /* A page turn is a timed glide that lifts off slowly and settles slowly, like a bird; the
+     chapter's text leaves at once, so the turn is felt the moment the wheel moves. A finger
+     drags the page like a rubber band; letting go either sails on or springs back. */
   let sailing = null;           // { to } while the page is gliding
   let pos = 0, vel = 0;
   let quietUntil = 0;           // a trackpad keeps sending wheel events after a flick
   let lastWheel = 0;
 
-  function glide(now, last) {
+  // ease in, ease out: a bird lifting off and settling (sine in/out, then a cubic tail)
+  const ease = (k) => (k < 1 ? 0.5 - 0.5 * Math.cos(Math.PI * k) : 1);
+  function glide(now) {
     if (!sailing) return;
-    const dt = Math.min(0.05, (now - last) / 1000);
-    const acc = W * W * (sailing.to - pos) - 2 * W * vel;   // critically damped: no overshoot
-    vel += acc * dt;
-    pos += vel * dt;
-    if (Math.abs(sailing.to - pos) < 0.6 && Math.abs(vel) < 8) {
-      pos = sailing.to; scrollTo(0, pos); sailing = null; vel = 0;
-      quietUntil = performance.now() + 250;
-      return;
-    }
+    const k = Math.min(1, (now - sailing.t0) / sailing.ms);
+    pos = sailing.from + (sailing.to - sailing.from) * ease(k);
     scrollTo(0, pos);
-    requestAnimationFrame((t) => glide(t, now));
+    if (k < 1) requestAnimationFrame(glide);
+    else {
+      sailing = null; vel = 0;
+      document.body.classList.remove('sailing');
+      quietUntil = performance.now() + 250;
+    }
   }
 
-  function sailTo(index, kick = 0) {
+  function sailTo(index) {
     index = THREE.MathUtils.clamp(index, 0, n - 1);
     const to = holdTop(index);
     if (reduced) { scrollTo(0, to); return; }
-    if (!sailing) { pos = scrollY; vel = 0; }
-    const dist = to - pos;
-    // the push points at the target and never outruns what the spring can stop without overshoot
-    if (kick) vel = Math.sign(dist) * Math.min(Math.abs(kick), Math.abs(dist) * W * 0.9);
-    const was = sailing;
-    sailing = { to, index };
-    if (!was) { const t = performance.now(); requestAnimationFrame((now) => glide(now, t)); }
+    const from = scrollY;
+    if (Math.abs(to - from) < 2) return;
+    // about three seconds a leg; a jump of several islands takes longer, but not much
+    const legs = Math.abs(chapterAt(from) - index) || 1;
+    const ms = Math.min(3000 + (legs - 1) * 1100, 6500);
+    const fresh = !sailing;
+    sailing = { to, index, from, t0: performance.now(), ms };
+    // the chapter's text leaves at once: the turn of the page is felt before the camera moves
+    document.body.classList.add('sailing');
+    if (fresh) requestAnimationFrame(glide);
   }
   chartGoTo = (index) => sailTo(index);
 
@@ -294,13 +295,13 @@ async function boot() {
   const inVoyage = (dir) => scrollY < maxScroll() - 2 || (dir < 0 && scrollY <= maxScroll() + innerHeight * 0.15);
   // the island the page is at or heading to
   const current = () => (sailing ? sailing.index : chapterAt(Math.min(scrollY, maxScroll())));
-  function page(dir, kick) {
+  function page(dir) {
     const here = current();
     if (!sailing && dir > 0 && here === n - 1 && scrollY >= holdTop(n - 1) - 2) return false;   // on into the end section
-    if (dir < 0 && scrollY > maxScroll() + 2) { sailTo(n - 1, kick); return true; }
+    if (dir < 0 && scrollY > maxScroll() + 2) { sailTo(n - 1); return true; }
     const y = sailing ? sailing.to : scrollY;
     const target = dir > 0 ? (y < holdTop(here) - 2 ? here : here + 1) : (y > holdTop(here) + 2 ? here : here - 1);
-    sailTo(target, kick);
+    sailTo(target);
     return true;
   }
 
@@ -314,8 +315,7 @@ async function boot() {
     const fresh = now - lastWheel > 220;
     lastWheel = now;
     if (!fresh || now < quietUntil) { e.preventDefault(); return; }
-    const px = Math.abs(e.deltaY) * (e.deltaMode === 1 ? 32 : 1);
-    if (page(dir, 420 + Math.min(px, 120) * 6)) e.preventDefault();
+    if (page(dir)) e.preventDefault();
   }, { passive: false });
 
   // touch: the page follows the finger (a little stiffer than the finger), then sails or springs back
@@ -324,7 +324,7 @@ async function boot() {
     if (playing) { touchY = null; return; }
     touchY = touchLastY = e.touches[0].clientY; touchLastT = performance.now(); touchV = 0;
     touchFrom = scrollY; dragging = false;
-    if (sailing) { sailing = null; vel = 0; }            // a finger on the glass catches the page
+    if (sailing) { sailing = null; vel = 0; document.body.classList.remove('sailing'); }   // a finger on the glass catches the page
   }, { passive: true });
   addEventListener('touchmove', (e) => {
     if (touchY === null) return;
@@ -346,14 +346,14 @@ async function boot() {
     const here = chapterAt(touchFrom);
     if (Math.abs(moved) < 30 && Math.abs(touchV) < 350) { sailTo(here); return; }   // springs back
     const dir = Math.sign(moved || touchV);
-    sailTo(here + dir, Math.abs(touchV) * 0.6 + 300);
+    sailTo(here + dir);
   });
 
   addEventListener('keydown', (e) => {
     if (playing || (e.target.closest && e.target.closest('input, textarea, video, summary'))) return;
     const dir = { ArrowDown: 1, PageDown: 1, ' ': 1, ArrowUp: -1, PageUp: -1 }[e.key];
     if (!dir || (e.key === ' ' && e.shiftKey)) return;
-    if (inVoyage(dir) && page(dir, 700)) e.preventDefault();
+    if (inVoyage(dir) && page(dir)) e.preventDefault();
   });
 
   const panels = [...document.querySelectorAll('.panel')];

@@ -641,6 +641,8 @@ html.sword-cursor, html.sword-cursor *{cursor:none!important}
   .web-cap .tw{display:none}
   .web-cap{min-height:34px}
 }
+/* while the page sails to the next island the chapter's text is already gone */
+body.sailing .panel{opacity:0 !important; pointer-events:none; transition:opacity .25s ease}
 </style>
 
 <canvas id="sea"></canvas>
