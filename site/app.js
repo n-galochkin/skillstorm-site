@@ -470,9 +470,14 @@ async function boot() {
   try { soundOff = localStorage.getItem('ss-sound') === 'off'; } catch (e) { /* storage blocked */ }
   sound.muted = soundOff;
   const sndBtn = $('sndBtn');
+  // three states: off; on but not started yet (the browser waits for a click - the wheel does not
+  // count), which invites a click; and playing
   const showSound = () => {
-    sndBtn.setAttribute('aria-pressed', String(!soundOff));
-    sndBtn.querySelector('.t').textContent = soundOff ? 'Sound off' : 'Sound on';
+    const playingNow = !!sound.ctx && sound.ctx.state === 'running';
+    const waiting = !soundOff && !playingNow;
+    sndBtn.setAttribute('aria-pressed', String(!soundOff && playingNow));
+    sndBtn.classList.toggle('armed', waiting);
+    sndBtn.querySelector('.t').textContent = soundOff ? 'Sound off' : waiting ? 'Click for sound' : 'Sound on';
   };
   showSound();
   sndBtn.addEventListener('click', (e) => {
@@ -481,9 +486,11 @@ async function boot() {
     try { localStorage.setItem('ss-sound', soundOff ? 'off' : 'on'); } catch (err) { /* storage blocked */ }
     sound.setMuted(soundOff);
     if (!soundOff) sound.start();
+    watchSound();
     showSound();
   });
-  const wake = () => { if (!soundOff) sound.start(); };
+  const watchSound = () => { if (sound.ctx && !sound.ctx.__watched) { sound.ctx.__watched = true; sound.ctx.addEventListener('statechange', showSound); } };
+  const wake = () => { if (!soundOff) { sound.start(); watchSound(); showSound(); } };
   for (const ev of ['pointerdown', 'keydown', 'touchend']) addEventListener(ev, wake, { passive: true });
   document.addEventListener('visibilitychange', () => {
     if (!sound.ctx) return;
@@ -616,6 +623,7 @@ async function boot() {
     get progress() { return progress; },
     // one real frame of the page (a hidden tab gets none of its own)
     frame: () => frame(),
+    get sound() { return sound; },
     step(seconds = 1 / 60, times = 1) {
       for (let k = 0; k < times; k++) { elapsed += seconds; world.tick(seconds, elapsed, { storm: 1 }); fight.update(seconds, elapsed); }
     },

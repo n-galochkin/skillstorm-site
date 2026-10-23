@@ -54,13 +54,17 @@ export class Soundscape {
     this.verbOut = gain(0.5);
     this.verb.connect(this.verbOut).connect(this.master);
 
-    // the sea: a low roll that swells and ebbs, and the hiss of foam riding on the swell
-    this.sea = gain(0.18);
-    loop(brown).connect(filter('lowpass', 420)).connect(this.sea).connect(this.master);
-    this.foam = gain(0.012);
+    // the sea: a roll that swells and ebbs - the deep part and the wash of water over it, which is
+    // what laptop and phone speakers can play (they drop most of the sea below 150 Hz) - and the
+    // hiss of foam riding on the swell
+    this.sea = gain(0.3);
+    loop(brown).connect(filter('lowpass', 900)).connect(this.sea).connect(this.master);
+    this.wash = gain(0.04);
+    loop(white).connect(filter('bandpass', 650, 0.5)).connect(this.wash).connect(this.master);
+    this.foam = gain(0.03);
     loop(white).connect(filter('bandpass', 2600, 0.6)).connect(this.foam).connect(this.master);
     // a soft wind over everything
-    this.breeze = gain(0.02);
+    this.breeze = gain(0.05);
     loop(white).connect(filter('bandpass', 520, 0.9)).connect(this.breeze).connect(this.master);
 
     // flight: the rush of air past the bird (its pitch and loudness follow the speed) and a low
@@ -146,10 +150,12 @@ export class Soundscape {
     const bed = playing ? 0.45 : 1 - 0.55 * k;
     if (this.time >= this.nextSwell) {
       this.nextSwell = this.time + 3.5 + Math.random() * 4;
-      this.sea.gain.setTargetAtTime((0.12 + Math.random() * 0.14) * bed, now, 1.4);
-      this.foam.gain.setTargetAtTime((0.006 + Math.random() * 0.014) * bed, now, 1.1);
+      const swell = Math.random();
+      this.sea.gain.setTargetAtTime((0.22 + 0.25 * swell) * bed, now, 1.4);
+      this.wash.gain.setTargetAtTime((0.05 + 0.09 * swell) * bed, now, 1.2);
+      this.foam.gain.setTargetAtTime((0.03 + 0.07 * swell) * bed, now, 1.1);
     }
-    this.breeze.gain.setTargetAtTime((0.018 + 0.01 * Math.sin(this.time * 0.37)) * bed, now, 0.8);
+    this.breeze.gain.setTargetAtTime((0.09 + 0.035 * Math.sin(this.time * 0.37)) * bed, now, 0.8);
     // wing beats: lifting off, and whenever it climbs hard
     if ((this.time < this.flapUntil || (flying && climb > 25)) && this.time >= this.nextFlap) {
       this.nextFlap = this.time + 0.21 + Math.random() * 0.05;

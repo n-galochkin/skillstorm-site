@@ -377,6 +377,11 @@ body.playing .windfx, body.playing .speed-vignette{display:none}
   transition:border-color .2s, color .2s;
 }
 .masthead .snd:hover{border-color:var(--gold); color:var(--gold)}
+/* sound is on but the browser has not let it start yet: the switch calls for a click */
+.masthead .snd.armed{color:var(--gold); border-color:var(--gold); animation:sndCall 1.6s ease-in-out infinite}
+.masthead .snd.armed .w{display:none}
+@keyframes sndCall{0%,100%{box-shadow:0 0 0 0 rgba(242,197,92,.0)} 50%{box-shadow:0 0 0 6px rgba(242,197,92,.28)}}
+@media (prefers-reduced-motion: reduce){ .masthead .snd.armed{animation:none} }
 .masthead .snd .x{display:none}
 .masthead .snd[aria-pressed="false"] .w{display:none}
 .masthead .snd[aria-pressed="false"] .x{display:inline}
