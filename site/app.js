@@ -492,6 +492,9 @@ async function boot() {
   const watchSound = () => { if (sound.ctx && !sound.ctx.__watched) { sound.ctx.__watched = true; sound.ctx.addEventListener('statechange', showSound); } };
   const wake = () => { if (!soundOff) { sound.start(); watchSound(); showSound(); } };
   for (const ev of ['pointerdown', 'keydown', 'touchend']) addEventListener(ev, wake, { passive: true });
+  // try at once: a browser that allows sound here (Chrome, on a site the visitor often plays media
+  // on) starts it now; the others keep it waiting for the first click, tap or key
+  wake();
   document.addEventListener('visibilitychange', () => {
     if (!sound.ctx) return;
     if (document.hidden) sound.ctx.suspend(); else if (!soundOff) sound.ctx.resume();
