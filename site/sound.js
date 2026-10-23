@@ -4,9 +4,11 @@
    крыльев, а просто ветер"; the sea "едва слышно, до воды далеко").
 
    Browsers start sound only after the visitor does something (a click, a tap, a key - not the
-   wheel), so start() is called from the first such event; until then nothing plays. */
+   wheel), so start() is called from the first such event; until then nothing plays.
+   Under it all, quietly, the game's own music (its piano, strings and percussion loops mixed into
+   one; Nikita 2026-10-23: "музыку из нашей игры на фон, только тихо"). */
 
-const FILES = { sea: 'assets/sfx/sea.mp3', bed: 'assets/sfx/wind-bed.mp3', flight: 'assets/sfx/wind-flight.mp3', gulls: 'assets/sfx/gulls.mp3' };
+const FILES = { music: 'assets/sfx/music.mp3', sea: 'assets/sfx/sea.mp3', bed: 'assets/sfx/wind-bed.mp3', flight: 'assets/sfx/wind-flight.mp3', gulls: 'assets/sfx/gulls.mp3' };
 
 export class Soundscape {
   constructor() {
@@ -29,6 +31,8 @@ export class Soundscape {
     this.sea = gain(0);
     this.bed = gain(0);
     this.flight = gain(0);
+    this.music = gain(0);
+    this.music.connect(this.master);
     this.flightTone = ctx.createBiquadFilter();
     this.flightTone.type = 'lowpass';
     this.flightTone.frequency.value = 900;
@@ -40,18 +44,19 @@ export class Soundscape {
       const res = await fetch(FILES[key]);
       return ctx.decodeAudioData(await res.arrayBuffer());
     };
-    const loop = (buf, dest) => {
+    const loop = (buf, dest, from = Math.random() * (buf.duration - 0.1)) => {
       const s = ctx.createBufferSource();
       s.buffer = buf; s.loop = true;
       // (an mp3 may carry a few ms of encoder padding at either end; the loop skips it)
       s.loopStart = 0.03; s.loopEnd = buf.duration - 0.03;
       s.connect(dest);
-      s.start(0, Math.random() * (buf.duration - 0.1));
+      s.start(0, from);
       return s;
     };
     for (const key of Object.keys(FILES)) {
       load(key).then((buf) => {
         this.buffers[key] = buf;
+        if (key === 'music') loop(buf, this.music, 0.03);
         if (key === 'sea') loop(buf, this.sea);
         if (key === 'bed') loop(buf, this.bed);
         if (key === 'flight') this.flightSrc = loop(buf, this.flightTone);
@@ -110,6 +115,8 @@ export class Soundscape {
     const t = Math.min(1, Math.max(0, (150 - height) / 105));
     const near = t * t * (3 - 2 * t);
     this.sea.gain.setTargetAtTime((0.05 + 0.25 * near) * bed, now, 0.9);
+    // the music: quiet, a touch quieter still while the air rushes
+    this.music.gain.setTargetAtTime(0.13 * (1 - 0.3 * k), now, 1.2);
     // gulls now and then, while it holds over an island
     if (this.time >= this.nextGull) {
       this.nextGull = this.time + 14 + Math.random() * 16;
