@@ -359,19 +359,48 @@ body.playing .chart{opacity:0; pointer-events:none}
 .bar i{display:block; height:100%; width:0; background:var(--gold); transition:width .3s}
 .boot small{color:var(--mist); font-family:var(--voice); font-size:17px; letter-spacing:.02em}
 
+/* the scroll hint: after a few idle seconds over an island, three chevrons light up one after
+   another, top to bottom, over a word - "go on, down" (app.js adds .show) */
 .cue{
   position:fixed; z-index:14; left:50%; translate:-50% 0;
-  bottom:calc(env(safe-area-inset-bottom,0px) + 22px);
-  display:flex; flex-direction:column; align-items:center; gap:9px;
-  color:var(--mist); transition:opacity .4s;
+  bottom:calc(env(safe-area-inset-bottom,0px) + 26px);
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  color:var(--gold); pointer-events:none;
+  opacity:0; transform:translateY(8px); transition:opacity .6s ease, transform .6s ease;
+  filter:drop-shadow(0 2px 6px rgba(0,0,0,.65));
 }
-.cue img{width:13px; opacity:.7; animation:cue 2.4s ease-in-out infinite}
-@keyframes cue{0%,100%{transform:translateY(0); opacity:.4} 50%{transform:translateY(5px); opacity:.85}}
-@media (max-width:860px){ .cue{display:none} }
+.cue.show{opacity:1; transform:none}
+.cue .cue-label{
+  font-family:var(--ui); font-weight:900; font-size:13px; letter-spacing:.32em; text-indent:.32em;
+  text-transform:uppercase; margin-bottom:6px; animation:cueWord 1.8s ease-in-out infinite;
+}
+.cue .chev{display:flex; flex-direction:column; align-items:center}
+.cue .chev i{
+  display:block; width:18px; height:18px; margin-top:-7px;
+  border-right:3px solid currentColor; border-bottom:3px solid currentColor; border-radius:0 0 3px 0;
+  rotate:45deg; opacity:.12; animation:cueChev 1.8s ease-in-out infinite;
+}
+.cue .chev i:nth-child(2){animation-delay:.22s}
+.cue .chev i:nth-child(3){animation-delay:.44s}
+@keyframes cueChev{0%,100%{opacity:.12; translate:0 -3px} 35%{opacity:1; translate:0 2px} 60%{opacity:.3; translate:0 4px}}
+@keyframes cueWord{0%,100%{opacity:.75} 40%{opacity:1}}
+.cue .cue-touch{display:none}
+@media (max-width:860px){
+  /* the chart holds the bottom right; the hint takes the bottom left */
+  .cue{left:var(--gut-l); translate:0 0; bottom:calc(env(safe-area-inset-bottom,0px) + 18px); align-items:flex-start}
+  .cue .chev{padding-left:22px}
+  .cue .cue-mouse{display:none} .cue .cue-touch{display:inline}
+}
+/* the cover's text runs to the foot of a phone: there the hint waits in the sky over the island,
+   between the masthead and the title */
+@media (max-width:860px){
+  body.hero-on .cue{left:50%; translate:-50% 0; align-items:center; bottom:auto; top:calc(env(safe-area-inset-top,0px) + 120px)}
+  body.hero-on .cue .chev{padding-left:0}
+}
 /* the cover's text reaches the foot of a short screen: the cue waits on the island's side,
    left of the chart, instead of on the facts line */
-body.hero-on .cue{left:auto; right:calc(var(--gut-r) + 120px); bottom:calc(env(safe-area-inset-bottom,0px) + 230px); translate:0 0}
-@media (prefers-reduced-motion: reduce){ .cue img{animation:none} .panel{transition:opacity .25s} }
+@media (min-width:861px){ body.hero-on .cue{left:auto; right:calc(var(--gut-r) + 120px); bottom:calc(env(safe-area-inset-bottom,0px) + 230px); translate:0 0} }
+@media (prefers-reduced-motion: reduce){ .cue .chev i, .cue .cue-label{animation:none; opacity:.85} .panel{transition:opacity .25s} }
 
 /* logos are sized by width only; without this the height attribute stretched them */
 .masthead .mark img, .foot img, .panel.hero .hero-logo, .boot .logo{height:auto}
@@ -805,9 +834,9 @@ body.sailing .panel{opacity:0 !important; pointer-events:none; transition:opacit
   </div>
 </div>
 
-<div class="cue" id="cue">
-  <span class="ui">Scroll</span>
-  <img src="assets/ui/T_UI_IconArrow.png" alt="">
+<div class="cue" id="cue" aria-hidden="true">
+  <span class="cue-label"><span class="cue-mouse">Scroll</span><span class="cue-touch">Swipe</span></span>
+  <span class="chev"><i></i><i></i><i></i></span>
 </div>
 
 <div class="boot" id="boot">

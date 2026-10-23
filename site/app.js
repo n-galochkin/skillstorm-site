@@ -340,7 +340,6 @@ async function boot() {
   function onScroll() {
     if (playing) { scrollTo(0, lockY); return; }
     progress = Math.min(1, scrollY / maxScroll());
-    $('cue').style.opacity = progress > 0.03 ? '0' : '1';
     document.body.classList.toggle('at-end', scrollY > maxScroll() + innerHeight * 0.12);
   }
   addEventListener('scroll', onScroll, { passive: true });
@@ -464,6 +463,13 @@ async function boot() {
   let shownIsland = null;
   const here = () => $('chartHere');
 
+  // when the visitor last did anything (the scroll hint waits for a still moment)
+  const CUE_AFTER = 4;
+  const cue = $('cue');
+  let lastInput = performance.now();
+  for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown', 'scroll']) {
+    addEventListener(ev, () => { lastInput = performance.now(); }, { passive: true });
+  }
   function frame() {
     const dt = Math.min(world.clock.getDelta(), 0.05);
     elapsed += dt;
@@ -511,6 +517,9 @@ async function boot() {
         el.style.opacity = String(near);
       }
       if (spec.storm) state.storm = settled ? Math.min(1, r.holdFor * 0.6) : 0.2;
+      // the scroll hint: after CUE_AFTER idle seconds over an island, until the visitor does anything
+      const idle = Math.min(r.holdFor, (performance.now() - lastInput) / 1000);
+      cue.classList.toggle('show', settled && idle > CUE_AFTER && scrollY <= maxScroll() + 2);
 
       const chart = $('chartSvg');
       if (chart.__place) chart.__place(Math.min(r.u, ISLANDS.length - 1.0001), r.station);
@@ -531,6 +540,8 @@ async function boot() {
     // numbers for every camera flight: await __ss.checkFlights() (see flightcheck.js)
     async checkFlights() { const m = await import('./flightcheck.js'); return m.checkFlights(world); },
     get progress() { return progress; },
+    // one real frame of the page (a hidden tab gets none of its own)
+    frame: () => frame(),
     step(seconds = 1 / 60, times = 1) {
       for (let k = 0; k < times; k++) { elapsed += seconds; world.tick(seconds, elapsed, { storm: 1 }); fight.update(seconds, elapsed); }
     },
