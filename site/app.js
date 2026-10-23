@@ -603,7 +603,7 @@ async function boot() {
     const flyingNow = world.isFlying();
     if (flyingNow && !wasFlying) sound.takeOff();
     wasFlying = flyingNow;
-    sound.update(dt, { speed: world.speed || 0, climb: world.climb || 0, flying: flyingNow, playing });
+    sound.update(dt, { speed: world.speed || 0, climb: world.climb || 0, height: world.camera.position.y, flying: flyingNow, playing });
     drawWind(dt);
 
     world.tick(dt, elapsed, state);

@@ -55,9 +55,9 @@ export class Soundscape {
     this.verb.connect(this.verbOut).connect(this.master);
 
     // the sea: a low roll that swells and ebbs, and the hiss of foam riding on the swell
-    this.sea = gain(0.18);
+    this.sea = gain(0);
     loop(brown).connect(filter('lowpass', 420)).connect(this.sea).connect(this.master);
-    this.foam = gain(0.012);
+    this.foam = gain(0);
     loop(white).connect(filter('bandpass', 2600, 0.6)).connect(this.foam).connect(this.master);
     // a soft wind over everything
     this.breeze = gain(0.02);
@@ -133,8 +133,8 @@ export class Soundscape {
     }
   }
 
-  /* every frame: speed in m/s, climb in m/s (up +), whether it is flying */
-  update(dt, { speed = 0, climb = 0, flying = false, playing = false } = {}) {
+  /* every frame: speed in m/s, climb in m/s (up +), height over the sea in m, whether it is flying */
+  update(dt, { speed = 0, climb = 0, height = 130, flying = false, playing = false } = {}) {
     this.time += dt;
     if (!this.ctx || this.ctx.state !== 'running') return;
     const now = this.ctx.currentTime;
@@ -144,10 +144,16 @@ export class Soundscape {
     this.rumble.gain.setTargetAtTime(0.5 * k, now, 0.15);
     // the sea and the breeze step back while the air rushes, and in the fight
     const bed = playing ? 0.45 : 1 - 0.55 * k;
+    // the sea is far below: barely there over an island, near only when it dives to the water
+    // (Nikita 2026-10-23: "должен быть слышен очень тихо, потому что до воды далеко")
+    const t = Math.min(1, Math.max(0, (160 - height) / 115));
+    const near = 0.08 + 0.92 * t * t * (3 - 2 * t);
+    this.sea.gain.setTargetAtTime((this.seaLevel || 0.18) * bed * near, now, 0.9);
+    this.foam.gain.setTargetAtTime((this.foamLevel || 0.012) * bed * near, now, 0.8);
     if (this.time >= this.nextSwell) {
       this.nextSwell = this.time + 3.5 + Math.random() * 4;
-      this.sea.gain.setTargetAtTime((0.12 + Math.random() * 0.14) * bed, now, 1.4);
-      this.foam.gain.setTargetAtTime((0.006 + Math.random() * 0.014) * bed, now, 1.1);
+      this.seaLevel = 0.12 + Math.random() * 0.14;
+      this.foamLevel = 0.006 + Math.random() * 0.014;
     }
     this.breeze.gain.setTargetAtTime((0.018 + 0.01 * Math.sin(this.time * 0.37)) * bed, now, 0.8);
     // wing beats: lifting off, and whenever it climbs hard
