@@ -903,13 +903,28 @@ export class World {
     pos.y += Math.sin(elapsed * 0.21) * 1.4 + Math.sin(elapsed * 0.67 + 1) * 0.5 * sway;
     look.x += (Math.sin(elapsed * 0.11 + 0.7) * 1.6 + gust * 1.5) * sway;
     look.z += Math.cos(elapsed * 0.09 + 0.3) * 1.2 * sway;
+    // how fast the camera really moves (smoothed), for the speed effects, the wind and the wing beats
+    if (dt > 0 && dt < 0.25 && this.prevCam) {
+      const vel = this.camPos.clone().sub(this.prevCam).multiplyScalar(1 / dt);
+      const kk = 1 - Math.exp(-8 * dt);
+      this.speed = THREE.MathUtils.lerp(this.speed || 0, vel.length(), kk);
+      this.climb = THREE.MathUtils.lerp(this.climb || 0, vel.y, kk);
+      if (vel.lengthSq() > 1) this.motionDir = (this.motionDir || vel.clone().normalize()).lerp(vel.normalize(), kk).normalize();
+    } else if (!(dt > 0)) { this.speed = this.speed || 0; }
+    this.prevCam = (this.prevCam || new THREE.Vector3()).copy(this.camPos);
+    // fast, the air buffets it: a fine tremble that grows with the speed
+    const buffet = THREE.MathUtils.smoothstep(this.speed || 0, 120, 380);
+    pos.x += (Math.sin(elapsed * 31) + Math.sin(elapsed * 47 + 1.3) * 0.6) * 0.35 * buffet;
+    pos.y += (Math.sin(elapsed * 37 + 0.7) + Math.sin(elapsed * 53) * 0.5) * 0.3 * buffet;
     this.camera.position.copy(pos);
     this.camera.lookAt(look);
     const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
     const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
     this.camera.position.addScaledVector(right, this.lean.x * 7).addScaledVector(up, -this.lean.y * 4);
     this.camera.rotateZ(((Math.sin(elapsed * 0.23) * 0.55 + Math.sin(elapsed * 0.61 + 0.4) * 0.2 + gust * 0.6) * sway + roll) * Math.PI / 180);
-    const fov = (this.baseFov || this.camera.fov) + fovKick;
+    // and the frame widens with the speed, the way a rush of speed feels
+    this.speedFov = THREE.MathUtils.damp(this.speedFov || 0, 10 * THREE.MathUtils.smoothstep(this.speed || 0, 60, 380), 4, Math.max(dt, 0) || 1 / 60);
+    const fov = (this.baseFov || this.camera.fov) + fovKick + this.speedFov;
     if (Math.abs(this.camera.fov - fov) > 0.01) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
     return this.voyageState(elapsed);
   }

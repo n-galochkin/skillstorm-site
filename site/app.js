@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { World, LIGHT, HOLD, TRAVEL } from './world.js';
 import { Fight } from './fight.js';
 import { buildWeb } from './combo_web.js';
+import { Soundscape } from './sound.js';
 import { ISLANDS, ISLETS } from './archipelago.js';
 
 const $ = (id) => document.getElementById(id);
@@ -463,6 +464,72 @@ async function boot() {
   let shownIsland = null;
   const here = () => $('chartHere');
 
+  /* ---- sound: on unless the visitor turned it off; it can start only after a click, tap or key ---- */
+  const sound = new Soundscape();
+  let soundOff = false;
+  try { soundOff = localStorage.getItem('ss-sound') === 'off'; } catch (e) { /* storage blocked */ }
+  sound.muted = soundOff;
+  const sndBtn = $('sndBtn');
+  const showSound = () => {
+    sndBtn.setAttribute('aria-pressed', String(!soundOff));
+    sndBtn.querySelector('.t').textContent = soundOff ? 'Sound off' : 'Sound on';
+  };
+  showSound();
+  sndBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    soundOff = !soundOff;
+    try { localStorage.setItem('ss-sound', soundOff ? 'off' : 'on'); } catch (err) { /* storage blocked */ }
+    sound.setMuted(soundOff);
+    if (!soundOff) sound.start();
+    showSound();
+  });
+  const wake = () => { if (!soundOff) sound.start(); };
+  for (const ev of ['pointerdown', 'keydown', 'touchend']) addEventListener(ev, wake, { passive: true });
+  document.addEventListener('visibilitychange', () => {
+    if (!sound.ctx) return;
+    if (document.hidden) sound.ctx.suspend(); else if (!soundOff) sound.ctx.resume();
+  });
+
+  /* ---- speed: streaks of wind rush out from where it flies, and the edges darken ---- */
+  const windFx = $('windFx'), wctx = windFx.getContext('2d'), vignette = $('speedVignette');
+  const streaks = Array.from({ length: 80 }, () => ({ a: Math.random() * Math.PI * 2, r: Math.random(), w: 0.6 + Math.random() }));
+  let windOn = 0, wasFlying = false;
+  const vp = new THREE.Vector3();
+  function drawWind(dt) {
+    const want = playing ? 0 : THREE.MathUtils.smoothstep(world.speed || 0, 90, 380);
+    windOn = THREE.MathUtils.damp(windOn, want, 5, dt);
+    vignette.style.opacity = (windOn * 0.85).toFixed(3);
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
+    if (windFx.width !== W || windFx.height !== H) { windFx.width = W; windFx.height = H; }
+    wctx.clearRect(0, 0, W, H);
+    if (windOn < 0.01) return;
+    // the point it flies toward, on screen (the middle when that is behind or off to the side)
+    let cx = W / 2, cy = H / 2;
+    if (world.motionDir) {
+      vp.copy(world.camera.position).addScaledVector(world.motionDir, 500).project(world.camera);
+      if (vp.z < 1 && Math.abs(vp.x) < 1.4 && Math.abs(vp.y) < 1.4) {
+        cx = (vp.x * 0.5 + 0.5) * W; cy = (-vp.y * 0.5 + 0.5) * H;
+      }
+    }
+    const reach = Math.hypot(W, H) * 0.75;
+    wctx.lineCap = 'round';
+    for (const s of streaks) {
+      s.r += dt * (0.35 + 1.8 * s.r) * (0.5 + 2.2 * windOn);
+      if (s.r > 1.05) { s.r = 0.12 + Math.random() * 0.25; s.a = Math.random() * Math.PI * 2; s.w = 0.6 + Math.random(); }
+      const fade = THREE.MathUtils.smoothstep(s.r, 0.18, 0.45);
+      const len = (0.03 + 0.14 * windOn) * s.r;
+      const r0 = s.r * reach, r1 = (s.r + len) * reach;
+      const ca = Math.cos(s.a), sa = Math.sin(s.a);
+      wctx.strokeStyle = `rgba(236,246,255,${(0.28 * windOn * fade).toFixed(3)})`;
+      wctx.lineWidth = s.w * dpr * (0.6 + windOn);
+      wctx.beginPath();
+      wctx.moveTo(cx + ca * r0, cy + sa * r0);
+      wctx.lineTo(cx + ca * r1, cy + sa * r1);
+      wctx.stroke();
+    }
+  }
+
   // when the visitor last did anything (the scroll hint waits for a still moment)
   const CUE_AFTER = 4;
   const cue = $('cue');
@@ -524,6 +591,13 @@ async function boot() {
       const chart = $('chartSvg');
       if (chart.__place) chart.__place(Math.min(r.u, ISLANDS.length - 1.0001), r.station);
     }
+
+    // the wind and the bird's wings
+    const flyingNow = world.isFlying();
+    if (flyingNow && !wasFlying) sound.takeOff();
+    wasFlying = flyingNow;
+    sound.update(dt, { speed: world.speed || 0, climb: world.climb || 0, flying: flyingNow, playing });
+    drawWind(dt);
 
     world.tick(dt, elapsed, state);
     fight.update(dt, elapsed);
